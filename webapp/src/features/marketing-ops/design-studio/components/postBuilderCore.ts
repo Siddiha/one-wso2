@@ -1374,7 +1374,16 @@ export function slideLabel(slide: Slide): string {
 export function imageToDataURL(img: ImageSource | null): string | null {
   if (!img) return null
   if (img instanceof HTMLCanvasElement) return img.toDataURL('image/png')
-  return img.src || null // <img> elements here were always loaded from a data URL
+  // <img> elements may be sourced from a blob: URL (e.g. library-picked backgrounds),
+  // which isn't valid outside the current page session — rasterize to a data URL instead
+  // of trusting img.src so autosave/save-to-file always persist a loadable image.
+  const canvas = document.createElement('canvas')
+  canvas.width = img.naturalWidth || img.width
+  canvas.height = img.naturalHeight || img.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx || canvas.width === 0 || canvas.height === 0) return null
+  ctx.drawImage(img, 0, 0)
+  return canvas.toDataURL('image/png')
 }
 
 export function serializeProject(state: PostState, textColors: TextColors, carouselOn: boolean, slides: Slide[], activeSlideIdx: number): ProjectFile {
@@ -1523,7 +1532,7 @@ export function importRowToPatch(row: Record<string, string>): ImportedRowPatch 
     fields.eventDates = row.eventdates || ''
   }
 
-  if (row.statnumber || row.statlabel) {
+  if (row.statnumber || row.statlabel || row.statnumber2 || row.statlabel2) {
     fields.statLeadin = row.statleadin || ''
     fields.statNumber = row.statnumber || ''
     fields.statLabel = row.statlabel || ''

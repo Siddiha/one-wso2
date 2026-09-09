@@ -134,8 +134,13 @@ export function PostBuilderEditor() {
 
   // Redraw whenever anything visible changes — React's state-then-effect cycle IS
   // the render pipeline here (no separate imperative render() call to remember).
+  // Debounced: draw() runs several 15-iteration text-fit binary searches, so
+  // redrawing synchronously on every keystroke causes visible input lag.
   useEffect(() => {
-    if (canvasRef.current) draw(canvasRef.current, state, textColors, carouselInfo)
+    const id = setTimeout(() => {
+      if (canvasRef.current) draw(canvasRef.current, state, textColors, carouselInfo)
+    }, 120)
+    return () => clearTimeout(id)
   }, [state, textColors, carouselInfo])
 
   // Never throws into the UI: a failed library load surfaces its own toast
@@ -554,13 +559,17 @@ export function PostBuilderEditor() {
       const slug = postFilenameSlug(state.headline, 'post')
       formats.forEach((fmt, idx) => {
         setTimeout(() => {
-          const fmtState = computeFormatState(fmt)
-          draw(canvas, fmtState, textColors, { on: false, slideCount: 0, activeIdx: 0 })
+          // Read live state/colors (not the click-time closure) so an edit made
+          // mid-batch is reflected in later downloads and in the final restore.
+          const liveState = stateRef.current
+          const liveColors = textColorsRef.current
+          const fmtState = { ...liveState, format: fmt, ...(fmt === 'square' ? { canvasW: 1080, canvasH: 1080 } : { canvasW: 1200, canvasH: 628 }) }
+          draw(canvas, fmtState, liveColors, { on: false, slideCount: 0, activeIdx: 0 })
           const a = document.createElement('a')
-          a.download = `wso2-${state.type}-${fmt}-${slug}.png`
+          a.download = `wso2-${liveState.type}-${fmt}-${slug}.png`
           a.href = canvas.toDataURL('image/png', 1)
           a.click()
-          if (idx === formats.length - 1) draw(canvas, state, textColors, carouselInfo)
+          if (idx === formats.length - 1) draw(canvas, liveState, liveColors, carouselInfo)
         }, idx * 250)
       })
     }

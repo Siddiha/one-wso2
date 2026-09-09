@@ -84,12 +84,18 @@ function cellToString(value: unknown): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value.trim()
   if (typeof value === 'number') return String(value)
+  if (typeof value === 'boolean') return value ? '1' : '0'
   if (value instanceof Date) return value.toISOString().slice(0, 10)
   if (typeof value === 'object') {
-    const v = value as { result?: unknown; richText?: { text: string }[]; text?: string }
+    const v = value as {
+      result?: unknown; richText?: { text: string }[]; text?: string; error?: string
+      formula?: string; sharedFormula?: string
+    }
+    if (v.error) return '' // #N/A and friends are not data
     if (v.result !== undefined) return cellToString(v.result)
     if (v.richText) return v.richText.map(r => r.text).join('').trim()
     if (v.text !== undefined) return String(v.text).trim()
+    if (v.formula !== undefined || v.sharedFormula !== undefined) return ''
     return ''
   }
   return String(value).trim()
