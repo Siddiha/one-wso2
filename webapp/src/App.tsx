@@ -41,6 +41,7 @@ import AssetNameSettingsPage from "@features/marketing-ops/admin/pages/AssetName
 import EmailWorkbenchSettingsPage from "@features/marketing-ops/admin/pages/EmailWorkbenchSettingsPage";
 import BlockCatalogPage from "@features/marketing-ops/email-workbench/pages/BlockCatalogPage";
 import EventsSettingsPage from "@features/marketing-ops/admin/pages/EventsSettingsPage";
+import PostBuilderPage from "@features/marketing-ops/design-studio/pages/PostBuilderPage";
 import {
   EventsMinePage,
   EventsReviewPage,
@@ -348,6 +349,12 @@ export default function App() {
           <Route path="marketing-ops/crm-upload/runs" element={<CrmUploadRunLogPage />} />
           <Route path="marketing-ops/crm-upload/records" element={<CrmUploadRecordsPage />} />
           <Route path="marketing-ops/crm-upload/review" element={<CrmUploadReviewPage />} />
+          {/* Design Studio → Post Builder — the canvas editor for branded LinkedIn
+              post and banner graphics. */}
+          <Route
+            path="marketing-ops/design-studio/post-builder"
+            element={<PostBuilderPage />}
+          />
           <Route path="settings" element={<SettingsPage />} />
           {/* Me → Menu: the cafeteria screen ported from the standalone
               menu app. One page, as the original was. The functional spec and
