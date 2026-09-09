@@ -441,6 +441,26 @@ export const marketingOpsServiceUrls = {
     `${marketingOpsBackendUrl}/api/ad-campaigns/ownership/bu-ownership/history${bu ? `?bu=${encodeURIComponent(bu)}` : ""}`,
   ownershipBuAssign: `${marketingOpsBackendUrl}/api/ad-campaigns/ownership/bu-ownership`,
 
+  // ---- design studio ----------------------------------------------------------
+  //
+  // The shared, DB-backed background-image library the Post Builder canvas editor
+  // draws from. Images are uploaded once and shared across users; content is
+  // immutable once uploaded (only name/description can change — see
+  // designStudioBackgroundImage below), so the thumbnail/full-image GETs are safe
+  // to cache forever client-side (see fetchBackgroundThumbnail/fetchBackgroundImage
+  // in useDesignStudio.ts).
+  //
+  // Thumbnail/image return BINARY, not JSON — same reason as
+  // emailWorkbenchTemplateThumbnail above: fetch as a blob with the Authorization
+  // header (see @features/finance/util/financeReceipts for the established pattern).
+  designStudioBackgroundImages: `${marketingOpsBackendUrl}/api/design-studio/background-images`,
+  designStudioBackgroundImage: (id: string) =>
+    `${marketingOpsBackendUrl}/api/design-studio/background-images/${encodeURIComponent(id)}`,
+  designStudioBackgroundImageThumbnail: (id: string) =>
+    `${marketingOpsBackendUrl}/api/design-studio/background-images/${encodeURIComponent(id)}/thumbnail`,
+  designStudioBackgroundImageFile: (id: string) =>
+    `${marketingOpsBackendUrl}/api/design-studio/background-images/${encodeURIComponent(id)}/image`,
+
   // ---- email workbench -------------------------------------------------------
   //
   // The template library (approved HTML + thumbnail), per-user drafts, the

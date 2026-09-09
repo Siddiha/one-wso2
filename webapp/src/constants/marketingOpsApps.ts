@@ -57,6 +57,7 @@
 import {
   ChartNoAxesCombinedIcon,
   MegaphoneIcon,
+  PaletteIcon,
   RefreshCwIcon,
   SettingsIcon,
   TicketIcon,
@@ -221,6 +222,22 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
     ],
   },
   {
+    key: "design-studio",
+    name: "Design Studio",
+    icon: PaletteIcon,
+    purpose:
+      "Build branded LinkedIn post and banner graphics from the shared background-image library.",
+    items: [
+      {
+        id: "mops-design-studio-post-builder",
+        label: "Post Builder",
+        desc: "Design a LinkedIn post or banner — pick a type, fill in content, choose a background, and export.",
+        requires: ["admin"],
+        path: "/marketing-ops/design-studio/post-builder",
+      },
+    ],
+  },
+  {
     key: "utilities",
     name: "Utilities",
     icon: WrenchIcon,
@@ -326,6 +343,7 @@ export const MARKETING_OPS_EYEBROW = {
   adCampaigns: eyebrowFor("ad-campaigns"),
   events: eyebrowFor("events"),
   crmUpload: eyebrowFor("crm-upload"),
+  designStudio: eyebrowFor("design-studio"),
   utilities: eyebrowFor("utilities"),
   admin: eyebrowFor("admin"),
 } as const;
