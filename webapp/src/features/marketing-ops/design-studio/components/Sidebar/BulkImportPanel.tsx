@@ -63,11 +63,17 @@ async function readXlsxRows(file: File): Promise<Record<string, string>[]> {
   if (!ws) return []
 
   let headers: string[] = []
+  let headerSeen = false
   const rows: Record<string, string>[] = []
-  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+  // { includeEmpty: false } skips blank rows but keeps each callback's
+  // `rowNumber` as the row's real position in the sheet — so a blank first
+  // row means the first callback fires with rowNumber 2, not 1. The header
+  // row is whichever row is visited FIRST, not whichever is numbered 1.
+  ws.eachRow({ includeEmpty: false }, (row) => {
     const values = row.values as unknown[] | undefined
     const cells = (values ?? []).slice(1).map(v => cellToString(v))
-    if (rowNumber === 1) {
+    if (!headerSeen) {
+      headerSeen = true
       headers = cells.map(c => c.toLowerCase())
       return
     }
@@ -123,7 +129,7 @@ export function BulkImportPanel({ onApplyRow, onExportAll, onError }: {
   }
 
   function handleFile(file: File) {
-    if (file.name.endsWith('.csv')) {
+    if (file.name.toLowerCase().endsWith('.csv')) {
       const reader = new FileReader()
       reader.onerror = () => onError("Couldn't read that file. Please try again.")
       reader.onload = ev => {
@@ -162,7 +168,7 @@ export function BulkImportPanel({ onApplyRow, onExportAll, onError }: {
         borderColor: 'divider', fontSize: '0.72rem', color: 'text.secondary', cursor: 'pointer',
       }}>
         Click to upload a .csv or .xlsx file
-        <input type="file" accept=".csv,.xlsx,.xls" hidden
+        <input type="file" accept=".csv,.xlsx" hidden
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
       </Box>
       {rows.length > 0 && (

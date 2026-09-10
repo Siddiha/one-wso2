@@ -65,13 +65,26 @@ export function PostTypeSelector({
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
                 {slides.map((slide, i) => (
                   <Box
-                    key={i} onClick={() => onSwitchSlide(i)}
+                    key={i}
+                    role="button"
+                    tabIndex={0}
+                    aria-current={i === activeSlideIdx}
+                    onClick={() => onSwitchSlide(i)}
+                    // Can't become a <button> (component="button") — it nests
+                    // the "remove slide" IconButton below, and interactive
+                    // elements can't nest. The target check keeps Enter/Space
+                    // on that nested button from also switching the slide.
+                    onKeyDown={e => {
+                      if (e.target !== e.currentTarget) return
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSwitchSlide(i) }
+                    }}
                     sx={{
                       display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer',
                       px: 1, py: 0.5, borderRadius: '6px', fontSize: '0.68rem',
                       border: '1px solid', borderColor: i === activeSlideIdx ? 'primary.main' : 'divider',
                       bgcolor: i === activeSlideIdx ? 'action.selected' : 'background.default',
                       color: i === activeSlideIdx ? 'primary.main' : 'text.secondary',
+                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '2px' },
                     }}
                   >
                     <span>{i + 1}. {slideLabel(slide)}</span>

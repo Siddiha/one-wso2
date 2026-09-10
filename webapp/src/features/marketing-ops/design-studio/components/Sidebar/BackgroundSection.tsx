@@ -30,13 +30,16 @@ import { BackgroundImageForm } from './BackgroundImageForm'
 // A single library tile: lazy-loads its own thumbnail once it scrolls near the
 // viewport, mirroring Email Workbench's TemplateLibrary.tsx Thumbnail component.
 function LibraryTile({
-  image, picking, onPick, onEdit, onDelete,
+  image, picking, disabled, onPick, onEdit, onDelete,
 }: {
   image: BackgroundImageSummary
   // True while THIS tile's full-resolution image is being fetched (a separate,
   // uncached request from the thumbnail above) — the fetch can take a moment,
   // so the tile needs to show the click landed rather than look unresponsive.
   picking: boolean
+  // True while ANY tile's pick is pending (including this one) — blocks a
+  // second, concurrent pick from applying out of order with the first.
+  disabled: boolean
   onPick: () => void
   onEdit: () => void
   onDelete: () => void
@@ -70,21 +73,25 @@ function LibraryTile({
     <Box
       ref={ref}
       role="button"
-      tabIndex={picking ? -1 : 0}
+      tabIndex={disabled ? -1 : 0}
       aria-label={`Use "${image.name}" as background`}
       aria-busy={picking}
+      aria-disabled={disabled}
       title={image.description || image.name}
       sx={{
         position: 'relative', height: 72, borderRadius: '8px', overflow: 'hidden',
-        cursor: picking ? 'default' : 'pointer',
+        cursor: disabled ? 'default' : 'pointer',
         border: '1px solid', borderColor: 'divider', bgcolor: 'background.default',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         '&:hover .tile-actions, &:focus-within .tile-actions': { opacity: picking ? 0 : 1 },
         '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '2px' },
       }}
-      onClick={picking ? undefined : onPick}
+      onClick={disabled ? undefined : onPick}
       onKeyDown={e => {
-        if (picking) return
+        if (disabled) return
+        // Ignore key events bubbling up from the Edit/Delete IconButtons —
+        // otherwise Enter/Space on either of them also re-triggers onPick.
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick() }
       }}
     >
@@ -262,6 +269,7 @@ export function BackgroundSection({
                 <LibraryTile
                   key={img.id} image={img}
                   picking={pickingLibraryImageId === img.id}
+                  disabled={pickingLibraryImageId !== null}
                   onPick={() => onPickLibraryImage(img.id)}
                   onEdit={() => openEditForm(img)}
                   onDelete={() => setDeleteTarget(img)}

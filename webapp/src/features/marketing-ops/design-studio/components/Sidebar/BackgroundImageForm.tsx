@@ -59,6 +59,7 @@ export function BackgroundImageForm({
 
   useEffect(() => {
     if (!open) return
+    let active = true
     revokeLocalPreview()
     setName(initial?.name ?? '')
     setDescription(initial?.description ?? '')
@@ -66,8 +67,14 @@ export function BackgroundImageForm({
     setFileError(null)
     setPreview(null)
     if (mode === 'edit' && initial) {
-      fetchBackgroundThumbnail(initial.id, getAccessToken).then(setPreview)
+      // Guarded: if `initial` changes again (or the dialog reopens for a
+      // different image) before this resolves, a stale thumbnail must not
+      // overwrite the preview for the image now being edited.
+      fetchBackgroundThumbnail(initial.id, getAccessToken).then(url => {
+        if (active) setPreview(url)
+      })
     }
+    return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, initial])
 

@@ -124,8 +124,14 @@ const thumbCache = new Map<string, Promise<string | null>>();
 const imageCache = new Map<string, Promise<string | null>>();
 
 async function loadBlobUrl(url: string, getAccessToken: () => Promise<string>): Promise<string | null> {
+  // marketingOpsBackendUrl comes from window.config with no scheme validation —
+  // refuse to send the bearer token anywhere but HTTPS rather than trusting a
+  // misconfigured (or compromised) config value.
+  if (!url.toLowerCase().startsWith("https://")) return null;
   try {
-    const res = await fetchWithReauth(url, {}, await getAccessToken());
+    // redirect: "error" so a compromised or misconfigured backend can't
+    // redirect the authenticated request to a non-HTTPS destination either.
+    const res = await fetchWithReauth(url, { redirect: "error" }, await getAccessToken());
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new HttpError(url, res.status, body);

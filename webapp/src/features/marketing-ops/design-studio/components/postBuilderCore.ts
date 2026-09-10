@@ -273,7 +273,7 @@ export function parseInlineBold(text: string): { text: string; bold: boolean }[]
 export function segmentsToWords(segments: { text: string; bold: boolean }[]): RichWord[] {
   const words: RichWord[] = []
   segments.forEach(seg => {
-    seg.text.split(' ').forEach(p => { if (p !== '') words.push({ text: p, bold: seg.bold }) })
+    seg.text.split(/\s+/).forEach(p => { if (p !== '') words.push({ text: p, bold: seg.bold }) })
   })
   return words
 }
@@ -1429,10 +1429,22 @@ export async function deserializeProject(proj: ProjectFile): Promise<Deserialize
     loadImageFromDataURL(proj.images?.customerLogo),
     loadImageFromDataURL(proj.images?.partnerLogo),
   ])
-  const state: PostState = { ...defaultPostState(), ...proj.state, bgImage, customerLogo, partnerLogo }
+  const defaults = defaultPostState()
+  const state: PostState = { ...defaults, ...proj.state, bgImage, customerLogo, partnerLogo }
+  // A hand-edited or corrupted project file can carry a non-finite/non-positive
+  // canvas size — draw() would assign it straight to the <canvas> element and
+  // produce an unusable (zero-size, or absurdly huge) canvas.
+  if (!Number.isFinite(state.canvasW) || state.canvasW <= 0) state.canvasW = defaults.canvasW
+  if (!Number.isFinite(state.canvasH) || state.canvasH <= 0) state.canvasH = defaults.canvasH
   const textColors: TextColors = { ...defaultTextColors(), ...(proj.textColors ?? {}) }
   const slides = Array.isArray(proj.slides) ? proj.slides : []
-  const activeSlideIdx = Math.min(proj.activeSlideIdx || 0, Math.max(slides.length - 1, 0))
+  // Same reasoning for activeSlideIdx: a negative or non-integer value can make
+  // drawBackground compute a negative image source position when background
+  // spanning is on.
+  const rawIdx = Number(proj.activeSlideIdx)
+  const activeSlideIdx = Number.isInteger(rawIdx)
+    ? Math.min(Math.max(rawIdx, 0), Math.max(slides.length - 1, 0))
+    : 0
   return { state, textColors, carouselOn: !!proj.carouselOn, slides, activeSlideIdx }
 }
 
@@ -1466,17 +1478,43 @@ export function csvRowTitle(row: Record<string, string>): string {
   return row.headline || row.quote1 || row.eventheadline || row.eventname || row.statnumber || '(untitled row)'
 }
 
-// Parses a raw .csv file's text into lowercase-header row objects — mirrors
-// the source tool's simple comma-split parser exactly (no quoted-comma
-// support, matching the original).
+// Splits one CSV line into fields, honoring double-quoted fields (which may
+// contain commas and escaped `""` quotes) — a bare `line.split(',')`, which
+// the source tool used, shifts every column after a quoted comma.
+function splitCsvLine(line: string): string[] {
+  const fields: string[] = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { field += '"'; i++ } else { inQuotes = false }
+      } else {
+        field += c
+      }
+    } else if (c === '"') {
+      inQuotes = true
+    } else if (c === ',') {
+      fields.push(field)
+      field = ''
+    } else {
+      field += c
+    }
+  }
+  fields.push(field)
+  return fields
+}
+
+// Parses a raw .csv file's text into lowercase-header row objects.
 export function parseCsvRows(text: string): Record<string, string>[] {
   const lines = text.trim().split('\n')
   if (!lines.length) return []
-  const hdrs = lines[0].split(',').map(h => h.trim().toLowerCase())
+  const hdrs = splitCsvLine(lines[0]).map(h => h.trim().toLowerCase())
   const rows = lines.slice(1).map(line => {
-    const v = line.split(',')
+    const v = splitCsvLine(line)
     const o: Record<string, string> = {}
-    hdrs.forEach((h, i) => { o[h] = (v[i] || '').trim().replace(/^"|"$/g, '') })
+    hdrs.forEach((h, i) => { o[h] = (v[i] || '').trim() })
     return o
   })
   return filterMeaningfulRows(rows)

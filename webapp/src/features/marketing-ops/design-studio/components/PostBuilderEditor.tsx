@@ -101,6 +101,7 @@ export function PostBuilderEditor() {
   // pre-warmed), so BackgroundSection needs this to show the tile isn't just
   // ignoring the click.
   const [pickingLibraryImageId, setPickingLibraryImageId] = useState<string | null>(null)
+  const pickingLibraryImageIdRef = useRef<string | null>(null)
 
   const getAccessToken = useAccessToken()
   // Shared background-image library (DB-backed, not localStorage) — a TanStack
@@ -155,6 +156,9 @@ export function PostBuilderEditor() {
 
   // ---- Autosave (localStorage), debounced 800ms — matches the source tool exactly ----
   useEffect(() => {
+    // Don't clobber the recoverable snapshot with the current (still-default,
+    // pre-restore) state before the user has answered the recovery prompt.
+    if (recovery) return
     const timer = window.setTimeout(() => {
       try {
         const proj = serializeProject(state, textColors, carouselOn, currentSlidesSnapshot(), activeSlideIdx)
@@ -167,7 +171,7 @@ export function PostBuilderEditor() {
     }, 800)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, textColors, carouselOn, slides, activeSlideIdx])
+  }, [state, textColors, carouselOn, slides, activeSlideIdx, recovery])
 
   // ---- Autosave recovery, checked once on mount ----
   useEffect(() => {
@@ -289,6 +293,13 @@ export function PostBuilderEditor() {
     }
   }
   async function onPickLibraryImage(id: string) {
+    // Serialize library picks: without this, selecting image A and then B
+    // before A's fetch resolves lets A's completion apply AFTER B's, silently
+    // reverting the user's later choice. pickingLibraryImageIdRef (unlike the
+    // state var) is readable synchronously, so a second click landing before
+    // the first render commits still sees the in-flight pick and bails.
+    if (pickingLibraryImageIdRef.current) return
+    pickingLibraryImageIdRef.current = id
     setPickingLibraryImageId(id)
     try {
       const url = await fetchBackgroundImage(id, getAccessToken)
@@ -297,6 +308,7 @@ export function PostBuilderEditor() {
       if (!img) { setInfoToast({ message: "Couldn't load that image.", severity: 'error' }); return }
       setState(s => ({ ...s, bgImage: img, bgRotate: 0, bgFlipH: false, bgFlipV: false }))
     } finally {
+      pickingLibraryImageIdRef.current = null
       setPickingLibraryImageId(null)
     }
   }
@@ -344,8 +356,15 @@ export function PostBuilderEditor() {
 
   function removeSlide(i: number) {
     if (slides.length <= 1) return
-    const removedSlide = slides[i], removedIdx = i, prevActiveIdx = activeSlideIdx
-    const next = [...slides]
+    // Snapshot the live editor state into the active slide first, matching
+    // switchToSlide/addSlide — otherwise deleting a DIFFERENT slide than the
+    // active one discards whatever the user just edited on the active slide,
+    // since the active slide's array entry would still hold its stale,
+    // pre-edit content.
+    const saved = [...slides]
+    saved[activeSlideIdx] = snapshotSlide(state, textColors)
+    const removedSlide = saved[i], removedIdx = i, prevActiveIdx = activeSlideIdx
+    const next = [...saved]
     next.splice(i, 1)
     const nextActiveIdx = activeSlideIdx >= next.length ? next.length - 1 : (i < activeSlideIdx ? activeSlideIdx - 1 : activeSlideIdx)
     const { state: nextState, textColors: nextColors } = applySlideToState(next[nextActiveIdx], state, textColors)
