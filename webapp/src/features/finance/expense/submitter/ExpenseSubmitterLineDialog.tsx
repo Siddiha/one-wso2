@@ -55,6 +55,7 @@ export function SubmitterLineDialog({
   onBehalfOfEmail,
   onBehalfOfName,
   editing,
+  restrictionFrom,
   uploading,
   onUpload,
   onClose,
@@ -71,6 +72,13 @@ export function SubmitterLineDialog({
   onBehalfOfName: string | null;
   /** The line being corrected, if any — otherwise a new one is being added. */
   editing: SubmitterDraftLine | undefined;
+  /**
+   * Date the past-date limit counts back from. Defaults to today for a new
+   * claim; the history screen passes the claim's own `createdDate` so that
+   * correcting an old claim does not fail a rule its lines already satisfied
+   * when they were first filed (ExpenseForm.tsx:137-139).
+   */
+  restrictionFrom?: string;
   uploading: boolean;
   onUpload: (file: File) => Promise<string>;
   onClose: () => void;
@@ -86,11 +94,11 @@ export function SubmitterLineDialog({
   const restrictionDays = appData.pastDateRestrictionDays;
   const minDate = useMemo(() => {
     if (restrictionDays == null) return undefined;
-    const from = new Date();
-    from.setDate(from.getDate() - (restrictionDays - 1));
+    const from = restrictionFrom ? new Date(restrictionFrom.replace(" ", "T")) : new Date();
     if (Number.isNaN(from.getTime())) return daysAgoIso(restrictionDays - 1);
+    from.setDate(from.getDate() - (restrictionDays - 1));
     return toIso(from);
-  }, [restrictionDays]);
+  }, [restrictionDays, restrictionFrom]);
 
   // Seeded from the line being edited, so the dialog opens on its values.
   const [date, setDate] = useState(editing?.date.substring(0, 10) ?? todayIso());
