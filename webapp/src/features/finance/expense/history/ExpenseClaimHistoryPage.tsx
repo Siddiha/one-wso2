@@ -25,8 +25,10 @@ import { ExpenseHistoryTable } from "./ExpenseHistoryTable";
 import { ExpenseHistoryClaimDetails } from "./ExpenseHistoryClaimDetails";
 import { ExpenseClaimActivityDrawer } from "./ExpenseClaimActivityDrawer";
 import { useExpenseHistoryAppData, useExpenseHistoryClaims } from "./useExpenseHistory";
+import { useExpenseEmployees } from "../useExpense";
 import {
   EMPTY_HISTORY_FILTERS,
+  makeNameResolver,
   toHistorySearchPayload,
   type HistoryClaim,
   type HistoryFilters,
@@ -48,6 +50,9 @@ export default function ExpenseClaimHistoryPage() {
 
 function HistoryBody() {
   const appData = useExpenseHistoryAppData();
+  // Names are what the source shows on screen; addresses live in tooltips.
+  const employees = useExpenseEmployees();
+  const nameFor = useMemo(() => makeNameResolver(employees.data), [employees.data]);
   const [filters, setFilters] = useState<HistoryFilters>(EMPTY_HISTORY_FILTERS);
   // The claim being read in full — the details panel takes over the page, the
   // way the source slides it over the list.
@@ -72,7 +77,7 @@ function HistoryBody() {
           onBack={() => setSelected(null)}
           onShowActivity={() => setActivityClaim(selected)}
         />
-        <ExpenseClaimActivityDrawer claim={activityClaim} onClose={() => setActivityClaim(null)} />
+        <ExpenseClaimActivityDrawer claim={activityClaim} nameFor={nameFor} onClose={() => setActivityClaim(null)} />
       </>
     );
   }
@@ -111,7 +116,7 @@ function HistoryBody() {
         />
       )}
 
-      <ExpenseClaimActivityDrawer claim={activityClaim} onClose={() => setActivityClaim(null)} />
+      <ExpenseClaimActivityDrawer claim={activityClaim} nameFor={nameFor} onClose={() => setActivityClaim(null)} />
     </Box>
   );
 }

@@ -85,7 +85,7 @@ export function ExpenseHistoryTable({
                     {/* utils.ts#isOnBehalfOfClaim — filed by someone else, so
                         the row is not about the signed-in person's own spend. */}
                     {isOnBehalfOfClaim(claim) && (
-                      <Tooltip describeChild title={`Submitted by ${claim.submittedBy}`} arrow>
+                      <Tooltip describeChild title={claim.submittedBy ?? ""} arrow>
                         <Chip
                           label="On behalf"
                           size="small"

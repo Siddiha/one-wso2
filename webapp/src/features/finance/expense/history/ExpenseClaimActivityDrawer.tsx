@@ -28,9 +28,12 @@ import type { HistoryClaim } from "./expenseHistoryTypes";
  */
 export function ExpenseClaimActivityDrawer({
   claim,
+  nameFor,
   onClose,
 }: {
   claim: HistoryClaim | null;
+  /** Resolves a work email to a display name for the submission stage. */
+  nameFor?: (email: string | null | undefined) => string;
   onClose: () => void;
 }) {
   const meta = expenseStatusMeta(claim?.statusDetails.status);
@@ -57,7 +60,7 @@ export function ExpenseClaimActivityDrawer({
             <StatusChip label={meta.label} color={meta.color} />
           </Stack>
 
-          <ExpenseClaimTimeline claim={claim} />
+          <ExpenseClaimTimeline claim={claim} nameFor={nameFor} />
         </Box>
       )}
     </Drawer>

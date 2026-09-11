@@ -114,6 +114,17 @@ vi.mock("../useExpense", () => ({
     isLoading: false,
     isError: false,
   }),
+  // Resolves the addresses on screen to names — the source shows names and
+  // keeps the address in a tooltip.
+  useExpenseEmployees: () => ({
+    data: [
+      { workEmail: "me@wso2.com", firstName: "Me", lastName: "Myself", employeeThumbnail: null },
+      { workEmail: "lead@wso2.com", firstName: "Ada", lastName: "Lovelace", employeeThumbnail: null },
+      { workEmail: "yukthi@wso2.com", firstName: "Yukthi", lastName: "Lochana", employeeThumbnail: null },
+    ],
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 vi.mock("../../components/FinanceShell", () => ({
@@ -356,10 +367,10 @@ describe("the claim activity trail", () => {
     expect(screen.getByText("Receipt unreadable")).toBeInTheDocument();
   });
 
-  it("says who filed a claim on someone's behalf", async () => {
+  it("says who the claim was filed for, by name", async () => {
     state.claims = [claim({ submittedBy: "yukthi@wso2.com" })];
     await openActivity();
-    expect(screen.getByText("Submitted by yukthi@wso2.com")).toBeInTheDocument();
+    expect(screen.getByText("Submitted for Yukthi Lochana")).toBeInTheDocument();
   });
 });
 

@@ -42,11 +42,12 @@ import { money } from "../../util/financeFormat";
 import { useFillHeight } from "../../util/useFillHeight";
 import { fetchReceiptObjectUrl, type ReceiptSource } from "../../util/financeReceipts";
 import { useExpenseReceiptUpload, useResubmitExpenseClaim } from "../useExpenseMutations";
+import { useExpenseEmployees } from "../useExpense";
 import { SubmitterLineDialog } from "../submitter/ExpenseSubmitterLineDialog";
 import type { SubmitterDraftLine } from "../submitter/expenseSubmitterTypes";
 import type { ExpenseAppData, ExpenseTransactionPayload } from "../expenseTypes";
 import { historyDate } from "./expenseHistoryFormat";
-import { isOnBehalfOfClaim, type HistoryClaim } from "./expenseHistoryTypes";
+import { isOnBehalfOfClaim, makeNameResolver, type HistoryClaim } from "./expenseHistoryTypes";
 import { isRejected } from "./ExpenseHistoryTable";
 
 /**
@@ -72,6 +73,8 @@ export function ExpenseHistoryClaimDetails({
 }) {
   const getAccessToken = useAccessToken();
   const { showSuccess, showError } = useNotifications();
+  const employees = useExpenseEmployees();
+  const nameFor = useMemo(() => makeNameResolver(employees.data), [employees.data]);
   const resubmit = useResubmitExpenseClaim();
   const upload = useExpenseReceiptUpload();
 
@@ -156,15 +159,24 @@ export function ExpenseHistoryClaimDetails({
         <StatusChip label={meta.label} color={meta.color} />
 
         {claim.leadEmails[0] && (
-          <Chip size="small" variant="outlined" label={`Lead: ${claim.leadEmails[0]}`} sx={{ fontSize: 11 }} />
+          <Tooltip describeChild arrow title={claim.leadEmails[0]}>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`Lead: ${nameFor(claim.leadEmails[0])}`}
+              sx={{ fontSize: 11 }}
+            />
+          </Tooltip>
         )}
         {isOnBehalfOfClaim(claim) && (
-          <Chip
-            size="small"
-            variant="outlined"
-            label={`Submitted by ${claim.submittedBy}`}
-            sx={{ fontSize: 11 }}
-          />
+          <Tooltip describeChild arrow title={claim.submittedBy ?? ""}>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`Submitted for ${nameFor(claim.submittedBy)}`}
+              sx={{ fontSize: 11 }}
+            />
+          </Tooltip>
         )}
 
         <Box sx={{ flex: 1 }} />

@@ -110,3 +110,18 @@ export function toHistorySearchPayload(
     status: filters.status === "All" ? undefined : [filters.status],
   };
 }
+
+/**
+ * Resolve a work email to a display name, falling back to the address when the
+ * employee list has not arrived or does not carry them. Names are what the
+ * source app shows on screen; the address belongs in a tooltip.
+ */
+export function makeNameResolver(employees: { workEmail: string; firstName: string | null; lastName: string | null }[] | undefined) {
+  const byEmail = new Map((employees ?? []).map((e) => [e.workEmail, e]));
+  return (email: string | null | undefined): string => {
+    if (!email) return "";
+    const match = byEmail.get(email);
+    const name = match && [match.firstName, match.lastName].filter(Boolean).join(" ").trim();
+    return name || email;
+  };
+}

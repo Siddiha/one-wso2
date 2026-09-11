@@ -48,7 +48,7 @@ interface Stage {
  * instance alive across claims, so colours computed once on mount would
  * describe whichever claim happened to be open first.
  */
-export function claimStages(claim: HistoryClaim): Stage[] {
+export function claimStages(claim: HistoryClaim, nameFor: (email: string | null | undefined) => string = (e) => e ?? ""): Stage[] {
   const s = claim.statusDetails;
   const status = s.status;
 
@@ -57,7 +57,7 @@ export function claimStages(claim: HistoryClaim): Stage[] {
     Icon: ReceiptTextIcon,
     date: claim.createdDate,
     tone: "success",
-    note: isOnBehalfOfClaim(claim) ? `Submitted by ${claim.submittedBy}` : null,
+    note: isOnBehalfOfClaim(claim) ? `Submitted for ${nameFor(claim.submittedBy)}` : null,
   };
 
   const lead: Stage =
@@ -89,8 +89,15 @@ export function claimStages(claim: HistoryClaim): Stage[] {
   return [submission, lead, finance];
 }
 
-export function ExpenseClaimTimeline({ claim }: { claim: HistoryClaim }) {
-  const stages = claimStages(claim);
+export function ExpenseClaimTimeline({
+  claim,
+  nameFor,
+}: {
+  claim: HistoryClaim;
+  /** Resolves a work email to a display name; the address stays in tooltips. */
+  nameFor?: (email: string | null | undefined) => string;
+}) {
+  const stages = claimStages(claim, nameFor);
   return (
     <Stack spacing={0}>
       {stages.map((stage, i) => (
