@@ -339,8 +339,9 @@ export interface UpdateMappingPayload {
 }
 
 // A row of GET /employees/basic-info — the option shape for employee pickers.
-// The endpoint returns ACTIVE employees only (it filters on employee_status
-// server-side), so anything here is someone currently employed.
+// The endpoint returns Active and Marked-leaver employees (it excludes only
+// fully Left ones), so a Marked-leaver — still employed, just scheduled to
+// leave — can legitimately appear and be picked here.
 export interface EmployeeBasicInfo {
   employeeId: string;
   firstName: string;

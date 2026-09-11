@@ -81,9 +81,10 @@ function SectionCard({ section }: { section: PerspectiveSection }) {
   return (
     <>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        {section.children?.length
-          ? "Reference data used across the app."
-          : "Preview against your filters, then export the full dataset as CSV."}
+        {section.description ??
+          (section.children?.length
+            ? "Reference data used across the app."
+            : "Preview against your filters, then export the full dataset as CSV.")}
       </Typography>
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
         {links.map((link) => (

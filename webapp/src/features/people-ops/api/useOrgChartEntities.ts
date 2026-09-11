@@ -146,10 +146,10 @@ export function useOrgChartEntities(kind: OrgEntityKind, enabled = true) {
 
 // GET /employees/basic-info — the option list for employee pickers.
 //
-// Returns ACTIVE employees only; the backend filters on employee_status in
-// its own query, so there is nothing to filter here and no way to ask for
-// leavers. That is what we want: you should not be able to appoint someone
-// who has left as the head of a team.
+// Returns Active and Marked-leaver employees; the backend excludes only
+// fully Left ones. A Marked-leaver is still employed until their leave
+// date, so appointing them as a team head is a legitimate (if temporary)
+// choice, not something to filter out here.
 //
 // Cached for the session — the roster changes on onboarding, not while a
 // dialog is open — and shared across every picker by a single query key.

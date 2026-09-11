@@ -17,11 +17,12 @@
 // Option-list assembly for EmployeeEmailPicker.
 //
 // Extracted from the component because the interesting case has no visual
-// component to it: /employees/basic-info returns ACTIVE employees only, but
-// an entity may already have a head who has since left. If that stored email
-// is not among the options, the Autocomplete treats the value as unmatched
-// and clears it — so merely opening a dialog would blank the field, and
-// saving anything else would quietly drop the head.
+// component to it: /employees/basic-info excludes fully Left employees (it
+// does include Marked-leavers), but an entity may already have a head who
+// has since actually left. If that stored email is not among the options,
+// the Autocomplete treats the value as unmatched and clears it — so merely
+// opening a dialog would blank the field, and saving anything else would
+// quietly drop the head.
 //
 // The fix is a synthetic option carrying the stored email, marked so the UI
 // can say why someone appears who is not on the roster.

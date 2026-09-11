@@ -20,6 +20,7 @@ import { Navigate, Route, Routes } from "react-router";
 import { landingPath } from "@config/landingConfig";
 import SettingsPage from "@features/settings/pages/SettingsPage";
 import MenuHomePage from "@features/menu/pages/MenuHomePage";
+import OrgChartPage from "@features/org-chart/pages/OrgChartPage";
 import AuthGuard from "@layouts/AuthGuard";
 import AppLayout from "@layouts/AppLayout";
 import PeopleOpsPage from "@features/people-ops/pages/PeopleOpsPage";
@@ -223,6 +224,13 @@ export default function App() {
           <Route path="finance/cc/history" element={<CcHistoryPage />} />
           <Route path="finance/cc/settings" element={<CcSettingsPage />} />
           <Route path="people-ops" element={<PeopleOpsPage />} />
+          {/* People Ops → Org Chart: the company's reporting hierarchy, ported
+              from the standalone org-chart app. Unlike every other People Ops
+              screen, this is NOT admin-gated — it has its own access model.
+              The UI is deliberately redesigned (outline instead of pan/zoom
+              canvas) — the functional spec and the deviation list live in
+              docs/ported-apps/org-chart.md. */}
+          <Route path="people-ops/org-chart" element={<OrgChartPage />} />
           {/* People Ops reports. Admin-only, but enforced by the backend and
               explained by PeopleOpsShell — there is no route-level guard, so
               a non-admin reaching this URL gets the shell's "no access"

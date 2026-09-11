@@ -62,17 +62,27 @@ describe("People Ops rail sections", () => {
     });
   });
 
-  it("gates every live screen on admin, nested ones included", () => {
+  it("gates every live screen on admin, nested ones included, except the one documented exception", () => {
     // These screens are org-wide and the backend serves them to admins only.
     // A live section without `requires` would advertise itself to everyone
     // and hand them a 403. Children count: that is where Master data's
     // route lives, so checking only the top level would miss it entirely.
+    //
+    // Org Chart is the one deliberate exception — same people-app backend,
+    // a different endpoint with its own access model (any employee in that
+    // endpoint's configured group, not a people-app admin privilege). See
+    // the comment above PEOPLE_OPS_SECTIONS and docs/ported-apps/org-chart.md §4.
+    const NOT_ADMIN_GATED = new Set(["people-org-chart"]);
     const live = PEOPLE_OPS_SECTIONS.flatMap((s) => [s, ...(s.children ?? [])]).filter(
       (s) => s.path,
     );
     expect(live.length).toBeGreaterThan(0);
     for (const s of live) {
-      expect(s.requires).toEqual(["admin"]);
+      if (NOT_ADMIN_GATED.has(s.id)) {
+        expect(s.requires).toBeUndefined();
+      } else {
+        expect(s.requires).toEqual(["admin"]);
+      }
     }
   });
 });
