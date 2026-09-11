@@ -102,9 +102,11 @@ function SubmitterBody() {
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [confirmingDeleteAll, setConfirmingDeleteAll] = useState(false);
   const [receiptLoad, setReceiptLoad] = useState<(() => Promise<ReceiptSource>) | null>(null);
-  // Null means "Myself", which is everyone's only option until the backend
-  // says otherwise.
+  // Null means "Myself". Starts there and is never seeded from the saved draft
+  // — NewClaim.tsx keeps `onBehalfOfEmail: null` initially, so a draft filed
+  // for a colleague simply is not offered until that colleague is picked.
   const [onBehalfOfEmail, setOnBehalfOfEmail] = useState<string | null>(null);
+  const savedDraftOnBehalfOf = appData.data?.draft?.onBehalfOfEmail ?? null;
 
   const email = appData.data?.userInfo.workEmail ?? "";
   const leadEmail = appData.data?.userInfo.managerEmail ?? null;
@@ -174,11 +176,35 @@ function SubmitterBody() {
     }));
   }, [appData.data]);
 
-  // Restoring a draft also restores WHOSE it was, which would silently
-  // override whoever is currently picked. Simplest correct rule: only offer it
-  // for Myself — picking someone else always starts a fresh claim for them.
-  const draftOffered = items.length === 0 && savedDraft.length > 0 && onBehalfOfEmail === null;
-  const savedDraftOnBehalfOf = appData.data?.draft?.onBehalfOfEmail ?? null;
+  // Restoring is offered for your OWN draft only — you are filing for
+  // yourself, and the draft was saved for yourself. Restoring an on-behalf
+  // draft is not supported yet, so the button stays away from that case
+  // entirely rather than half-working.
+  //
+  // Both halves matter. Without the first, a colleague's draft appeared on
+  // your own empty claim and restoring it silently switched the picker to
+  // them; without the second, picking a colleague would offer a restore this
+  // screen cannot honour.
+  //
+  // Saving is unaffected: an on-behalf claim still autosaves with its
+  // `onBehalfOfEmail`, so nothing is lost — it just cannot be restored here.
+  const draftOffered =
+    items.length === 0 &&
+    savedDraft.length > 0 &&
+    onBehalfOfEmail === null &&
+    savedDraftOnBehalfOf === null;
+
+  /**
+   * Whether starting a line would destroy a stored draft — independent of who
+   * the claim is for, and of whether that draft can be restored here.
+   *
+   * `expense_claim_draft` is keyed on the caller's email alone
+   * (`WHERE email = ${userEmail}`), so a person has exactly ONE draft slot.
+   * Adding a line autosaves into that slot and overwrites whatever was there,
+   * including a draft saved for a colleague. Gating the warning on
+   * `draftOffered` meant picking an employee silently discarded it.
+   */
+  const draftAtRisk = items.length === 0 && savedDraft.length > 0;
 
   const draftState = useDraftAutosave(JSON.stringify(items), appData.isSuccess, async () => {
     if (items.length > 0) {
@@ -201,9 +227,9 @@ function SubmitterBody() {
   }
 
   const handleRestoreDraft = () => {
-    // Restore WHO it was for alongside the lines, batched into the same update
-    // so the travels query re-keys and starts fetching immediately.
-    setOnBehalfOfEmail(savedDraftOnBehalfOf);
+    // Only the lines. The picker is already on the draft's owner — that is the
+    // condition for offering it at all — so there is nothing to switch, and
+    // NewClaim.tsx's own handler does no more than this either.
     setItems(savedDraft);
     showSuccess("Draft restored successfully");
   };
@@ -337,8 +363,10 @@ function SubmitterBody() {
               <Button
                 variant="contained"
                 onClick={() => {
-                  // Starting a new line discards the saved draft.
-                  if (draftOffered) {
+                  // Gated on `draftAtRisk`, NOT `draftOffered`: a draft you
+                  // cannot restore here is still a draft this line will
+                  // destroy, so the warning has to come either way.
+                  if (draftAtRisk) {
                     setConfirmingDraftLoss(true);
                     return;
                   }
