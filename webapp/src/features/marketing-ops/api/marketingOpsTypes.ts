@@ -46,7 +46,8 @@ export type MarketingOpsCapability =
   | "emailworkbench"
   | "adcampaigns"
   | "events"
-  | "events-review";
+  | "events-review"
+  | "designstudio";
 
 // GET /api/me. Authenticated but deliberately NOT gated — an authenticated
 // caller who holds none of the Marketing Ops groups still gets a 200 with
