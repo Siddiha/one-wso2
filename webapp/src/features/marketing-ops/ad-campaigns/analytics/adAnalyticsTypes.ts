@@ -53,7 +53,7 @@ export interface RoiConfigBody {
     opp_scope: OppScope[];
   };
   funnel_stages: FunnelStage[];
-  filters: { lead_source_details: string[]; regions: string[] };
+  filters: { lead_source_details: string[]; regions: string[]; products: string[] };
   exclude_internal_emails: boolean;
 }
 

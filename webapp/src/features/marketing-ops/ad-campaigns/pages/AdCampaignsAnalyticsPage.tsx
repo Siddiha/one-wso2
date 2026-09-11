@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Box, IconButton, Tooltip, Typography } from "@wso2/oxygen-ui";
 import { RefreshCw } from "@wso2/oxygen-ui-icons-react";
 import { MARKETING_OPS_EYEBROW } from "@constants/marketingOpsApps";
@@ -23,6 +23,7 @@ import {
   roiSupported as isRoiSupported,
   useAdDashboard,
   useLinkedInRoiReport,
+  useRoiOptions,
   useRoiReport,
 } from "../../api/useAdAnalytics";
 import type { AdPlatform, DateWindow, GroupByDim } from "../analytics/adAnalyticsTypes";
@@ -57,13 +58,28 @@ export default function AdCampaignsAnalyticsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Dashboard");
   const [platform, setPlatform] = useState<AdPlatform>("google");
   const [window, setWindow] = useState<DateWindow>(DEFAULT_WINDOW);
-  const [groupBy, setGroupBy] = useState<GroupByDim>("campaign");
+  const [groupBy, setGroupByState] = useState<GroupByDim>("campaign");
+  const [secondGroupBy, setSecondGroupBy] = useState<GroupByDim | null>(null);
+  // Top-level ROI filters (Google only — see roiOptions). Empty = no filter.
+  const [regionFilter, setRegionFilter] = useState<string[]>([]);
+  const [productFilter, setProductFilter] = useState<string[]>([]);
+
+  // Changing the primary breakdown can't leave a "Then by" selection pointing at
+  // the same dimension — reset it rather than allow a duplicate/invalid combo.
+  const setGroupBy = useCallback((g: GroupByDim) => {
+    setGroupByState(g);
+    setSecondGroupBy((prev) => (prev === g ? null : prev));
+  }, []);
+
+  // Selector options (regions/products actually present in the data) for the
+  // ROI tab's multi-select filters — fetched once, not tied to a selection.
+  const roiOptions = useRoiOptions();
 
   // Each hook decides for itself whether it should fetch — the LinkedIn report
   // stays idle on Google and vice versa (see `enabled` in useAdAnalytics), so
   // switching platform doesn't fire a request for the platform you just left.
   const dashboard = useAdDashboard(platform, window);
-  const roi = useRoiReport(platform, window, groupBy);
+  const roi = useRoiReport(platform, window, groupBy, secondGroupBy, regionFilter, productFilter);
   const linkedInRoi = useLinkedInRoiReport(platform, window);
 
   const roiSupported = isRoiSupported(platform);
@@ -205,6 +221,13 @@ export default function AdCampaignsAnalyticsPage() {
             query={roi}
             groupBy={groupBy}
             onGroupBy={setGroupBy}
+            secondGroupBy={secondGroupBy}
+            onSecondGroupBy={setSecondGroupBy}
+            regionFilter={regionFilter}
+            onRegionFilter={setRegionFilter}
+            productFilter={productFilter}
+            onProductFilter={setProductFilter}
+            roiOptions={roiOptions.data}
             roiSupported={roiSupported}
             platform={platform}
           />
