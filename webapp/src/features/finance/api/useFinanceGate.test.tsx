@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 // Three backends, three vocabularies, none of them the people-app roles the
@@ -149,5 +149,28 @@ describe("what stayed behind", () => {
   // capabilities, which cannot express "expense finance approver".
   it("routes the claim-approval entry through this gate", () => {
     expect(FINANCE_ITEM_IDS.has("claim-approval")).toBe(true);
+  });
+});
+
+// The tile on the Finance overview asks the gate by this id, so the flag has to
+// be answered here and not only by dropping the registry entry.
+describe("a preview-gated item", () => {
+  const originalConfig = window.config;
+  afterEach(() => {
+    window.config = originalConfig;
+  });
+
+  it("is refused when the preview flag is absent", () => {
+    window.config = { ...(window.config ?? {}) } as Window["config"];
+    delete (window.config as { ONE_WSO2_PREVIEW_FEATURES?: unknown }).ONE_WSO2_PREVIEW_FEATURES;
+    expect(gate().canSee("expense-new")).toBe(false);
+  });
+
+  it("is allowed when the preview flag is on", () => {
+    window.config = {
+      ...(window.config ?? {}),
+      ONE_WSO2_PREVIEW_FEATURES: { expenseSubmitter: true },
+    } as Window["config"];
+    expect(gate().canSee("expense-new")).toBe(true);
   });
 });

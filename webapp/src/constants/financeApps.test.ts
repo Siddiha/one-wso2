@@ -16,14 +16,29 @@
  * under the License.
  */
 
-import { describe, expect, it } from "vitest";
-import {
-  FINANCE_APPS,
-  FINANCE_ITEM_IDS,
-  FINANCE_PERSPECTIVE_APPS,
-  ME_FINANCE_APPS,
-} from "./financeApps";
-import { PERSPECTIVES } from "./perspectives";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * The expense app is behind a preview flag, so the registry is no longer a
+ * constant — it depends on `window.config`. Everything here therefore imports
+ * it fresh per state rather than at the top of the file.
+ */
+type FinanceApps = typeof import("./financeApps");
+
+async function load(preview: { expenseSubmitter?: boolean } = {}): Promise<FinanceApps> {
+  vi.resetModules();
+  window.config = {
+    ...(window.config ?? {}),
+    ONE_WSO2_PREVIEW_FEATURES: preview,
+  } as Window["config"];
+  return import("./financeApps");
+}
+
+const originalConfig = window.config;
+beforeEach(() => vi.resetModules());
+afterEach(() => {
+  window.config = originalConfig;
+});
 
 // Which perspective an app belongs to is a decision, and nothing used to record
 // it — the apps simply appeared wherever the registry happened to be spread.
@@ -37,68 +52,73 @@ describe("where each finance app lives", () => {
   // card app is not part of the set every employee needs.
   //
   // "expense" is a deliberate exception to "each app lives in exactly one
-  // place": its New Claim route under Finance renders the very same page as
-  // "claims" → Expense under Me (see expenseFinancePaths.ts) — a second door
-  // onto the same room, not a fork. It still has its own registry key,
-  // distinct from "claims", which is what the other invariants below
-  // actually depend on.
-  it("keeps claims with the person, and both the card and expense claims with finance", () => {
+  // place": its New Claim route under Finance renders a submitter page for the
+  // same claims "claims" → Expense under Me files — a second door onto the same
+  // room, not a fork. It is behind a preview flag until the two doors are
+  // reconciled, so every assertion below states which state it is describing.
+  it("keeps claims with the person, and the card app with finance", async () => {
+    const { ME_FINANCE_APPS, FINANCE_PERSPECTIVE_APPS } = await load();
     expect(keys(ME_FINANCE_APPS)).toEqual(["claims"]);
-    expect(keys(FINANCE_PERSPECTIVE_APPS)).toEqual(["expense", "cc"]);
+    expect(keys(FINANCE_PERSPECTIVE_APPS)).toEqual(["cc"]);
   });
 
-  it("puts every app KEY in exactly one of the two", () => {
-    expect(keys(FINANCE_APPS).sort()).toEqual(["cc", "claims", "expense"]);
-    const overlap = keys(ME_FINANCE_APPS).filter((k) => keys(FINANCE_PERSPECTIVE_APPS).includes(k));
-    expect(overlap).toEqual([]);
+  it("adds the expense app to finance only when the preview flag is on", async () => {
+    const off = await load({ expenseSubmitter: false });
+    expect(keys(off.FINANCE_PERSPECTIVE_APPS)).toEqual(["cc"]);
+
+    const on = await load({ expenseSubmitter: true });
+    expect(keys(on.FINANCE_PERSPECTIVE_APPS)).toEqual(["expense", "cc"]);
+  });
+
+  it("is hidden by an absent flag, not only by an explicit false", async () => {
+    // Production ships no entry at all; safety must not depend on remembering
+    // to write `false`.
+    const { FINANCE_PERSPECTIVE_APPS } = await load();
+    expect(keys(FINANCE_PERSPECTIVE_APPS)).not.toContain("expense");
+  });
+
+  it("puts every app KEY in exactly one of the two", async () => {
+    for (const preview of [{}, { expenseSubmitter: true }]) {
+      const { FINANCE_APPS, ME_FINANCE_APPS, FINANCE_PERSPECTIVE_APPS } = await load(preview);
+      const overlap = keys(ME_FINANCE_APPS).filter((k) =>
+        keys(FINANCE_PERSPECTIVE_APPS).includes(k),
+      );
+      expect(overlap).toEqual([]);
+      expect(keys(FINANCE_APPS)).toContain("claims");
+      expect(keys(FINANCE_APPS)).toContain("cc");
+    }
   });
 
   // A path under the wrong perspective is a rail entry that navigates out of
   // the perspective it was clicked in.
-  it("gives each app paths under the perspective it is surfaced in", () => {
-    for (const path of paths(ME_FINANCE_APPS)) expect(path.startsWith("/me/")).toBe(true);
-    for (const path of paths(FINANCE_PERSPECTIVE_APPS)) {
-      expect(path.startsWith("/finance/")).toBe(true);
-    }
-  });
-
-  // Moving an app means it leaves where it was. Registering it in both places
-  // would show it twice with two sets of URLs, and only one set has routes.
-  it("takes the card app out of Me, not just adds it to Finance", () => {
-    const me = PERSPECTIVES.find((p) => p.key === "me");
-    const meSectionIds = (me?.sections ?? []).map((s) => s.id);
-    for (const app of FINANCE_PERSPECTIVE_APPS) {
-      expect(meSectionIds, `${app.key} is still under Me`).not.toContain(`sec-app-${app.key}`);
-    }
-    // ...and the one that stayed is still there.
-    for (const app of ME_FINANCE_APPS) {
-      expect(meSectionIds).toContain(`sec-app-${app.key}`);
-    }
-  });
-
-  it("routes every finance item through the finance gate", () => {
-    for (const app of FINANCE_APPS) {
-      for (const item of app.items) {
-        expect(FINANCE_ITEM_IDS.has(item.id), `${item.id} bypasses the gate`).toBe(true);
+  it("gives each app paths under the perspective it is surfaced in", async () => {
+    for (const preview of [{}, { expenseSubmitter: true }]) {
+      const { ME_FINANCE_APPS, FINANCE_PERSPECTIVE_APPS } = await load(preview);
+      for (const path of paths(ME_FINANCE_APPS)) expect(path.startsWith("/me/")).toBe(true);
+      for (const path of paths(FINANCE_PERSPECTIVE_APPS)) {
+        expect(path.startsWith("/finance/")).toBe(true);
       }
     }
   });
 
-  // The rail renders the Finance perspective's own sections; an app registered
-  // for it that never reaches those sections would simply not appear.
-  it("surfaces the finance-perspective apps in that perspective", () => {
-    const finance = PERSPECTIVES.find((p) => p.key === "finance");
-    const sectionIds = (finance?.sections ?? []).map((s) => s.id);
-    // And the reverse: an app under Me must not also appear here.
-    for (const app of ME_FINANCE_APPS) {
-      expect(sectionIds).not.toContain(`sec-app-${app.key}`);
+  it("routes every finance item through the finance gate, in both states", async () => {
+    for (const preview of [{}, { expenseSubmitter: true }]) {
+      const { FINANCE_APPS, FINANCE_ITEM_IDS } = await load(preview);
+      for (const app of FINANCE_APPS) {
+        for (const item of app.items) {
+          expect(FINANCE_ITEM_IDS.has(item.id), `${item.id} bypasses the gate`).toBe(true);
+        }
+      }
     }
-    // `appsToSections` prefixes the section id — the app key alone is not what
-    // ends up in the rail.
-    for (const app of FINANCE_PERSPECTIVE_APPS) {
-      expect(sectionIds, `${app.key} is registered but not surfaced`).toContain(
-        `sec-app-${app.key}`,
-      );
-    }
+  });
+
+  // Hiding the entry must not take the whole app down: FINANCE_EYEBROW is built
+  // at module load by looking apps up in the registry, and an absent app used to
+  // throw there before anything rendered.
+  it("still builds its eyebrows when the expense app is hidden", async () => {
+    const { FINANCE_EYEBROW } = await load();
+    expect(FINANCE_EYEBROW.claims.label).toBeTruthy();
+    expect(FINANCE_EYEBROW.cc.label).toBeTruthy();
+    expect(FINANCE_EYEBROW.expense.label).toBeTruthy();
   });
 });

@@ -106,6 +106,11 @@ declare global {
       // Asgardeo. Ignored in production builds (see devBypassAuth below),
       // so a stray true in a prod config.js can't disable auth.
       ONE_WSO2_DEV_BYPASS_AUTH?: boolean;
+      // Features built but not yet released — see @config/previewFeatures.
+      // Absent or false hides the feature, so a deployment that says nothing
+      // shows nothing. Typed loosely here and narrowed by `PreviewFeature` at
+      // the read, so this declaration does not have to be edited for each flag.
+      ONE_WSO2_PREVIEW_FEATURES?: Record<string, boolean | undefined>;
     };
   }
 }

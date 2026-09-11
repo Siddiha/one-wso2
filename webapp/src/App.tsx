@@ -22,6 +22,7 @@ import SettingsPage from "@features/settings/pages/SettingsPage";
 import MenuHomePage from "@features/menu/pages/MenuHomePage";
 import OrgChartPage from "@features/org-chart/pages/OrgChartPage";
 import AuthGuard from "@layouts/AuthGuard";
+import { isPreviewEnabled } from "@config/previewFeatures";
 import AppLayout from "@layouts/AppLayout";
 import PeopleOpsPage from "@features/people-ops/pages/PeopleOpsPage";
 import ActiveEmployeesReportPage from "@features/people-ops/pages/ActiveEmployeesReportPage";
@@ -217,7 +218,12 @@ export default function App() {
           </Route>
           <Route path="me/claims/expense/new" element={<ExpenseNewClaimPage />} />
           <Route path="me/claims/opd/new" element={<OpdNewClaimPage />} />
-          <Route path="finance/expense-claims/new" element={<ExpenseSubmitterPage />} />
+          {/* Behind the same preview flag as its menu entry. Hiding only the
+              entry would leave the page reachable by anyone with the URL, which
+              is not what "not released yet" means. */}
+          {isPreviewEnabled("expenseSubmitter") && (
+            <Route path="finance/expense-claims/new" element={<ExpenseSubmitterPage />} />
+          )}
           <Route path="finance/cc/dashboard" element={<CcDashboardPage />} />
           <Route path="finance/cc/new" element={<CcNewTransactionsPage />} />
           <Route path="finance/cc/pending" element={<CcPendingPage />} />

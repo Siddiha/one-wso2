@@ -30,6 +30,7 @@
 import { CreditCardIcon, ReceiptTextIcon } from "@wso2/oxygen-ui-icons-react";
 import { CC_PATH } from "@features/finance/cc/ccPaths";
 import { expenseFinancePaths } from "@features/finance/expense/expenseFinancePaths";
+import { isPreviewEnabled } from "@config/previewFeatures";
 import type { MenuApp } from "@constants/appMenu";
 
 /**
@@ -65,15 +66,32 @@ export const ME_FINANCE_APPS: readonly MenuApp[] = [
  * needs; it sits with the other finance operations instead.
  */
 export const FINANCE_PERSPECTIVE_APPS: readonly MenuApp[] = [
-  {
-    key: "expense",
-    name: "Expense Claims",
-    icon: ReceiptTextIcon,
-    purpose: "File a new expense claim.",
-    items: [
-      { id: "expense-new", label: "New Claim", desc: "File a new expense claim.", path: expenseFinancePaths.new },
-    ],
-  },
+  // Held behind a preview flag: Me → Claims already offers a new-claim flow,
+  // and showing a second entry point under Finance before the two are
+  // reconciled would leave people with two ways in and no way to tell which
+  // one they want.
+  //
+  // Spread in rather than filtered out, so with the flag off the entry does not
+  // exist at all — the rail sections and favourites both derive from this list.
+  //
+  // It is NOT the whole story. The Finance overview builds its tiles by hand
+  // and asks `useFinanceGate` by item id, so that surface is gated there
+  // instead; removing the entry here would have left its tile pointing at a
+  // route that no longer exists. The launcher shows perspectives rather than
+  // app items, so it is unaffected either way.
+  ...(isPreviewEnabled("expenseSubmitter")
+    ? [
+        {
+          key: "expense",
+          name: "Expense Claims",
+          icon: ReceiptTextIcon,
+          purpose: "File a new expense claim.",
+          items: [
+            { id: "expense-new", label: "New Claim", desc: "File a new expense claim.", path: expenseFinancePaths.new },
+          ],
+        },
+      ]
+    : []),
   {
     key: "cc",
     name: "Credit Card Expenses",
@@ -108,8 +126,17 @@ export const FINANCE_ITEM_IDS: ReadonlySet<string> = new Set([
 // Eyebrow descriptors for FinanceShell, derived from the registry above so the
 // chip on every finance screen can't drift from the app's own name and icon.
 function eyebrowFor(key: string): { icon: MenuApp["icon"]; label: string } {
-  const app = FINANCE_APPS.find((a) => a.key === key)!;
-  return { icon: app.icon, label: app.name };
+  // No `!` here. An app can legitimately be absent from the registry — a
+  // preview feature whose flag is off is not in the list at all — and this
+  // runs at module load, so asserting would take the whole app down with a
+  // TypeError before anything rendered, not just lose a chip.
+  //
+  // The fallback is never seen in practice: if an app is hidden, the screens
+  // that wear its eyebrow are unreachable too.
+  const app = FINANCE_APPS.find((a) => a.key === key);
+  return app
+    ? { icon: app.icon, label: app.name }
+    : { icon: ReceiptTextIcon, label: "Finance" };
 }
 
 export const FINANCE_EYEBROW = {

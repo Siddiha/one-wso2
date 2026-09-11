@@ -20,6 +20,7 @@ import { ccHasAccess } from "../cc/ccTypes";
 import { useOpdUserInfo } from "../opd/useOpd";
 import { OPD_ROLE, opdHasRole } from "../opd/opdTypes";
 import { useExpenseAppData } from "../expense/useExpense";
+import { isPreviewEnabled } from "@config/previewFeatures";
 
 // Items that declare `requires` in the registry but aren't explicitly mapped
 // below must fail CLOSED — otherwise a renamed or newly-added restricted item
@@ -74,6 +75,13 @@ export function useFinanceGate(enabled = true): FinanceGate {
       // No lead stage exists for OPD — the backend grants role 555 or nothing.
       case "claim-approval-opd":
         return opdFinance;
+      // Behind a preview flag until the Finance and Me new-claim entry points
+      // are reconciled. Answered here as well as by removing the registry
+      // entry, because the Finance overview builds its tiles by hand and asks
+      // the gate by id — a registry-only change would leave that tile offering
+      // a route that no longer exists.
+      case "expense-new":
+        return isPreviewEnabled("expenseSubmitter");
       case "cc-approve":
         return ccLeadOrFinance;
       case "cc-settings":

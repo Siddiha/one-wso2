@@ -114,3 +114,20 @@ describe("the Finance overview", () => {
     expect(screen.queryByText(/Nothing here for you yet/)).not.toBeInTheDocument();
   });
 });
+
+// The overview builds its tiles by hand and asks the gate by id, so removing an
+// app from the registry does NOT remove its tile here. Gating the entry without
+// gating the tile would leave a card offering a route that no longer exists.
+describe("a preview feature's tile", () => {
+  it("is absent when the gate says the feature is off", () => {
+    gate.allow = new Set(["cc-dashboard"]); // expense-new withheld
+    show();
+    expect(screen.queryByText("Expense Claims")).not.toBeInTheDocument();
+  });
+
+  it("appears when the gate says it is on", () => {
+    gate.allow = new Set(["cc-dashboard", "expense-new"]);
+    show();
+    expect(screen.getByText("Expense Claims")).toBeInTheDocument();
+  });
+});

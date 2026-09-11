@@ -100,4 +100,16 @@ window.config = {
   // alive; true signs out at 30 minutes, which is what the security checklist
   // (ONEWSO2-R1) asks for.
   // ONE_WSO2_IDLE_AUTO_SIGN_OUT: false,
+
+  // Features that are built and merged but not released yet. Absent or false
+  // hides the feature — a deployment that says nothing shows nothing, so
+  // production is safe without anyone remembering to add an entry.
+  //
+  // NOT the same as an empty backend URL above. That means "not wired up";
+  // this means "wired up, but not for you yet".
+  //
+  // Each entry is deleted when its feature ships — a list that only grows
+  // stops describing anything.
+  //
+  // ONE_WSO2_PREVIEW_FEATURES: { expenseSubmitter: false },
 };
