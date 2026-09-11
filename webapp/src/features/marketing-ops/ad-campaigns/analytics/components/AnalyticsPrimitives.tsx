@@ -210,6 +210,7 @@ export function MultiSelectFilter({
           onChange(typeof v === "string" ? v.split(",") : v);
         }}
         input={<OutlinedInput />}
+        inputProps={{ "aria-label": label }}
         renderValue={(sel) => {
           const arr = sel as string[];
           if (arr.length === 0) return emptyLabel ?? `All ${label.toLowerCase()}s`;
@@ -220,7 +221,7 @@ export function MultiSelectFilter({
         {options.map((o) => (
           <MenuItem key={o} value={o} dense>
             <Checkbox checked={selected.includes(o)} size="small" sx={{ py: 0 }} />
-            <ListItemText primary={o} primaryTypographyProps={{ fontSize: 13 }} />
+            <ListItemText primary={o} slotProps={{ primary: { fontSize: 13 } }} />
           </MenuItem>
         ))}
       </Select>

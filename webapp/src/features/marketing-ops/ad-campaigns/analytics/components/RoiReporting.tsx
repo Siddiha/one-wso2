@@ -281,7 +281,10 @@ function ResultsView({
     // two rows sharing the same campaign-derived value but different
     // Salesforce-only values carry an *identical* shared spend value repeated
     // (must dedupe, not sum) — see the backend engine's spend_shared rollup.
-    const dedupeSpend = anySharedSpend && subtotalDim !== "lead_source_detail";
+    // "campaign" is the only campaign-derived dim in GROUP_BY — region,
+    // product and lead_source_detail are all Salesforce-only, so subtotaling
+    // by any of them must sum, never dedupe.
+    const dedupeSpend = anySharedSpend && subtotalDim === "campaign";
     const groups = new Map<string, RoiRow[]>();
     rows.forEach((r) => {
       const key = r.dims?.[subtotalDim] ?? "";

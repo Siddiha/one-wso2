@@ -535,7 +535,12 @@ function SpendCrossPie({
   filterLabel: string;
 }) {
   const [filter, setFilter] = useState<string>("all");
-  const data = filter === "all" ? base : crossTabSlice(cross, axis, filter);
+  // Falls back to "all" if a dashboard refresh returns new `options` that no
+  // longer include the current selection — otherwise crossTabSlice looks up a
+  // matrix key that no longer exists and the chart renders empty instead of
+  // recovering to the unfiltered view.
+  const activeFilter = filter === "all" || options.includes(filter) ? filter : "all";
+  const data = activeFilter === "all" ? base : crossTabSlice(cross, axis, activeFilter);
   return (
     <SpendPie
       title={title}
@@ -543,8 +548,9 @@ function SpendCrossPie({
       headerExtra={
         <Select
           size="small"
-          value={filter}
+          value={activeFilter}
           onChange={(e) => setFilter(e.target.value)}
+          aria-label={`Filter ${title} by ${filterLabel}`}
           sx={{ fontSize: 11.5, minWidth: 150 }}
         >
           <MenuItem value="all" sx={{ fontSize: 11.5 }}>
