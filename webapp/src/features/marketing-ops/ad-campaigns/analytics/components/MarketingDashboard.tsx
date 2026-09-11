@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Alert,
   Box,
@@ -32,6 +32,7 @@ import { describeError } from "@api/errors";
 import type {
   Dashboard,
   DashConvType,
+  DashCrossTab,
   DashOpportunities,
   DashSpendBreakdown,
   FunnelData,
@@ -161,8 +162,22 @@ function GoogleDashboard({ s }: { s: Dashboard["sections"] }) {
 
       <SectionTitle>Spend breakdown</SectionTitle>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
-        <SpendPie title="By business unit" data={s.spend_by_product} />
-        <SpendPie title="By region" data={s.spend_by_region} />
+        <SpendCrossPie
+          title="By business unit"
+          base={s.spend_by_product}
+          cross={s.spend_by_bu_region}
+          axis="colFixed"
+          options={s.spend_by_bu_region.cols}
+          filterLabel="region"
+        />
+        <SpendCrossPie
+          title="By region"
+          base={s.spend_by_region}
+          cross={s.spend_by_bu_region}
+          axis="rowFixed"
+          options={s.spend_by_bu_region.rows}
+          filterLabel="business unit"
+        />
       </Box>
 
       {(s.conversions_by_type || s.conversions_by_region || s.conversions_by_product) && (
@@ -208,8 +223,22 @@ function PerformanceDashboard({ s }: { s: Dashboard["sections"] }) {
 
       <SectionTitle>Spend breakdown</SectionTitle>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
-        <SpendPie title="By business unit" data={s.spend_by_product} />
-        <SpendPie title="By region" data={s.spend_by_region} />
+        <SpendCrossPie
+          title="By business unit"
+          base={s.spend_by_product}
+          cross={s.spend_by_bu_region}
+          axis="colFixed"
+          options={s.spend_by_bu_region.cols}
+          filterLabel="region"
+        />
+        <SpendCrossPie
+          title="By region"
+          base={s.spend_by_region}
+          cross={s.spend_by_bu_region}
+          axis="rowFixed"
+          options={s.spend_by_bu_region.rows}
+          filterLabel="business unit"
+        />
       </Box>
 
       {s.campaign_performance && (
@@ -456,8 +485,92 @@ function FunnelView({ data }: { data: FunnelData }) {
   );
 }
 
+// Slice the BU×region spend cross-tab down to one dimension, holding the other
+// fixed — this is how each spend pie gets a filter for the *other* dimension:
+// "By business unit" fixes a region (colFixed) and yields one row per BU;
+// "By region" fixes a business unit (rowFixed) and yields one row per region.
+// Segments with zero spend under the fixed value are dropped rather than shown
+// as empty pie slices.
+function crossTabSlice(
+  cross: DashCrossTab,
+  axis: "rowFixed" | "colFixed",
+  fixedValue: string,
+): DashSpendBreakdown {
+  const segments = axis === "rowFixed" ? cross.cols : cross.rows;
+  const spendFor = (seg: string) =>
+    axis === "rowFixed" ? (cross.matrix[fixedValue]?.[seg] ?? 0) : (cross.matrix[seg]?.[fixedValue] ?? 0);
+  const total = (axis === "rowFixed" ? cross.row_totals[fixedValue] : cross.col_totals[fixedValue]) ?? 0;
+  const rows = segments
+    .map((seg) => ({
+      label: seg,
+      spend: spendFor(seg),
+      clicks: 0,
+      impressions: 0,
+      ctr: null as number | null,
+      pct: null as number | null,
+    }))
+    .filter((r) => r.spend > 0);
+  rows.forEach((r) => {
+    r.pct = total ? Math.round((r.spend / total) * 1000) / 10 : null;
+  });
+  rows.sort((a, b) => b.spend - a.spend);
+  return { total_spend: total, rows };
+}
+
+// A spend pie with an optional filter on the *other* dimension of the BU×region
+// cross-tab — e.g. the "By business unit" pie can be narrowed to one region.
+function SpendCrossPie({
+  title,
+  base,
+  cross,
+  axis,
+  options,
+  filterLabel,
+}: {
+  title: string;
+  base: DashSpendBreakdown;
+  cross: DashCrossTab;
+  axis: "rowFixed" | "colFixed";
+  options: string[];
+  filterLabel: string;
+}) {
+  const [filter, setFilter] = useState<string>("all");
+  const data = filter === "all" ? base : crossTabSlice(cross, axis, filter);
+  return (
+    <SpendPie
+      title={title}
+      data={data}
+      headerExtra={
+        <Select
+          size="small"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          sx={{ fontSize: 11.5, minWidth: 150 }}
+        >
+          <MenuItem value="all" sx={{ fontSize: 11.5 }}>
+            All {filterLabel}s
+          </MenuItem>
+          {options.map((o) => (
+            <MenuItem key={o} value={o} sx={{ fontSize: 11.5 }}>
+              {o}
+            </MenuItem>
+          ))}
+        </Select>
+      }
+    />
+  );
+}
+
 // ── spend pie (BU / region) — chart + companion table ─────────────────────────
-function SpendPie({ title, data }: { title: string; data: DashSpendBreakdown }) {
+function SpendPie({
+  title,
+  data,
+  headerExtra,
+}: {
+  title: string;
+  data: DashSpendBreakdown;
+  headerExtra?: ReactNode;
+}) {
   const { cell, hdr } = useTableSx();
   // Memoised so the array identity is stable across re-renders. Without it
   // Recharts sees a "new" dataset every render and replays its entry animation,
@@ -468,9 +581,12 @@ function SpendPie({ title, data }: { title: string; data: DashSpendBreakdown }) 
   );
   return (
     <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1.25, p: 2 }}>
-      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: "text.secondary", mb: 1 }}>
-        {title}
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, flexWrap: "wrap", mb: 1 }}>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: "text.secondary" }}>
+          {title}
+        </Typography>
+        {headerExtra}
+      </Box>
       <Box sx={{ height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>

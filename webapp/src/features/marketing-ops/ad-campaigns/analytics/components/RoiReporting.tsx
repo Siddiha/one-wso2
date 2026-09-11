@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import type { ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import {
   Alert,
   Box,
@@ -28,12 +28,13 @@ import {
   Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { Download } from "@wso2/oxygen-ui-icons-react";
+import { ChevronsDownUp, ChevronsUpDown, Download } from "@wso2/oxygen-ui-icons-react";
 import { describeError } from "@api/errors";
 import {
   downloadCsv,
   roiReportToCsv,
   type GroupByDim,
+  type RoiOptions,
   type RoiReport,
   type RoiRow,
   type RoiTotals,
@@ -42,6 +43,7 @@ import { ACCENT, num, perDollar, usd } from "../chartTheme";
 import {
   EmptyHint,
   FieldLabel,
+  MultiSelectFilter,
   ReportLoading,
   StatCard,
   ToggleChip,
@@ -82,15 +84,47 @@ export default function RoiReporting({
   query,
   groupBy,
   onGroupBy,
+  secondGroupBy,
+  onSecondGroupBy,
+  regionFilter,
+  onRegionFilter,
+  productFilter,
+  onProductFilter,
+  roiOptions,
   roiSupported,
   platform,
 }: {
   query: { data?: RoiReport; isLoading: boolean; isError: boolean; error: Error | null };
   groupBy: GroupByDim;
   onGroupBy: (g: GroupByDim) => void;
+  secondGroupBy: GroupByDim | null;
+  onSecondGroupBy: (g: GroupByDim | null) => void;
+  regionFilter: string[];
+  onRegionFilter: (v: string[]) => void;
+  productFilter: string[];
+  onProductFilter: (v: string[]) => void;
+  roiOptions?: RoiOptions;
   roiSupported: boolean;
   platform: string;
 }) {
+  // Which of the two active breakdown levels subtotals are grouped by — a pure
+  // display preference, not part of the fetch key (no re-fetch on change).
+  // null = off (default): today's flat table, no subtotal rows.
+  const [subtotalLevel, setSubtotalLevel] = useState<1 | 2 | null>(null);
+  // When subtotaling, optionally hide the detail rows so only the subtotal
+  // (and grand total) rows show — a quick way to scan just the group summaries.
+  const [subtotalsCollapsed, setSubtotalsCollapsed] = useState(false);
+  // Which subtotal-dimension values to show — empty means "show all". The
+  // value set (and its meaning) is tied to which dim is being subtotaled, so a
+  // stale selection from a different dim/breakdown must not carry over — reset
+  // during render (React's "adjusting state when inputs change" pattern) when
+  // the key changes, rather than in an effect, which would cost an extra render.
+  const [selectedSubtotalValues, setSelectedSubtotalValues] = useState<string[]>([]);
+  const [subtotalKey, setSubtotalKey] = useState([groupBy, secondGroupBy, subtotalLevel] as const);
+  if (subtotalKey[0] !== groupBy || subtotalKey[1] !== secondGroupBy || subtotalKey[2] !== subtotalLevel) {
+    setSubtotalKey([groupBy, secondGroupBy, subtotalLevel]);
+    setSelectedSubtotalValues([]);
+  }
   // LinkedIn ads expose no utm_campaign — a creative only references a post — so
   // there is nothing to attribute a lead back to a campaign by. This is a
   // structural limitation of the integration, not a missing feature, which is
@@ -119,14 +153,46 @@ export default function RoiReporting({
       {/* Breakdown selector — ROI-local. Changing it re-runs ONLY this report
           (its own query key), not the dashboard. */}
       <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1.5, p: 2.5, mb: 3 }}>
+        {roiOptions && (roiOptions.products.length > 0 || roiOptions.regions.length > 0) && (
+          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "flex-end", mb: 2 }}>
+            {roiOptions.products.length > 0 && (
+              <MultiSelectFilter
+                label="Business unit"
+                options={roiOptions.products}
+                selected={productFilter}
+                onChange={onProductFilter}
+              />
+            )}
+            {roiOptions.regions.length > 0 && (
+              <MultiSelectFilter
+                label="Region"
+                options={roiOptions.regions}
+                selected={regionFilter}
+                onChange={onRegionFilter}
+              />
+            )}
+          </Box>
+        )}
         <FieldLabel>Break down by</FieldLabel>
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center", mb: 2 }}>
           {GROUP_BY.map((g) => (
             <ToggleChip
               key={g.key}
               label={g.label}
               active={groupBy === g.key}
               onClick={() => onGroupBy(g.key)}
+            />
+          ))}
+        </Box>
+        <FieldLabel>Then by</FieldLabel>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+          <ToggleChip label="None" active={secondGroupBy === null} onClick={() => onSecondGroupBy(null)} />
+          {GROUP_BY.filter((g) => g.key !== groupBy).map((g) => (
+            <ToggleChip
+              key={g.key}
+              label={g.label}
+              active={secondGroupBy === g.key}
+              onClick={() => onSecondGroupBy(g.key)}
             />
           ))}
         </Box>
@@ -139,7 +205,15 @@ export default function RoiReporting({
           {describeError(query.error)}
         </Alert>
       ) : query.data ? (
-        <ResultsView report={query.data} />
+        <ResultsView
+          report={query.data}
+          subtotalLevel={subtotalLevel}
+          setSubtotalLevel={setSubtotalLevel}
+          subtotalsCollapsed={subtotalsCollapsed}
+          setSubtotalsCollapsed={setSubtotalsCollapsed}
+          selectedSubtotalValues={selectedSubtotalValues}
+          setSelectedSubtotalValues={setSelectedSubtotalValues}
+        />
       ) : (
         <EmptyHint>Pick a date range to see the report.</EmptyHint>
       )}
@@ -147,7 +221,23 @@ export default function RoiReporting({
   );
 }
 
-function ResultsView({ report }: { report: RoiReport }) {
+function ResultsView({
+  report,
+  subtotalLevel,
+  setSubtotalLevel,
+  subtotalsCollapsed,
+  setSubtotalsCollapsed,
+  selectedSubtotalValues,
+  setSelectedSubtotalValues,
+}: {
+  report: RoiReport;
+  subtotalLevel: 1 | 2 | null;
+  setSubtotalLevel: (l: 1 | 2 | null) => void;
+  subtotalsCollapsed: boolean;
+  setSubtotalsCollapsed: (c: boolean) => void;
+  selectedSubtotalValues: string[];
+  setSelectedSubtotalValues: (v: string[]) => void;
+}) {
   const { cell, hdr } = useTableSx();
   const t = report.totals;
   const mq = report.match_quality;
@@ -169,6 +259,65 @@ function ResultsView({ report }: { report: RoiReport }) {
     cfg?.funnel_stages ?? ["lead", "mql", "sal", "sql", "opportunity", "closed_won"],
   );
   const anySharedSpend = rows.some((r) => r.spend_shared);
+
+  // With two active breakdown levels, group the detail rows by whichever level
+  // the user picked and insert a subtotal row after each group (before the
+  // grand Total). A single-level breakdown renders exactly as before.
+  const groupDims: string[] = cfg?.group_by ?? dimKeys;
+  const hasSecondLevel = groupDims.length >= 2;
+  const subtotalDim = hasSecondLevel && subtotalLevel ? groupDims[subtotalLevel - 1] : null;
+
+  // The subtotal dimension's distinct values, offered as an optional filter —
+  // picking none shows every group (the default); picking some shows only those.
+  const subtotalValueOptions = subtotalDim
+    ? Array.from(new Set(rows.map((r) => r.dims?.[subtotalDim] ?? "").filter((v) => v !== ""))).sort()
+    : [];
+
+  let bodyRows: ReactNode;
+  let hiddenGroupCount = 0;
+  if (subtotalDim) {
+    // Two rows sharing the same value of a Salesforce-only dim but different
+    // campaign-derived values each carry their own real spend (safe to sum);
+    // two rows sharing the same campaign-derived value but different
+    // Salesforce-only values carry an *identical* shared spend value repeated
+    // (must dedupe, not sum) — see the backend engine's spend_shared rollup.
+    const dedupeSpend = anySharedSpend && subtotalDim !== "lead_source_detail";
+    const groups = new Map<string, RoiRow[]>();
+    rows.forEach((r) => {
+      const key = r.dims?.[subtotalDim] ?? "";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
+    });
+    let entries = Array.from(groups.entries()).map(([key, groupRows]) => ({
+      key,
+      groupRows,
+      subtotal: computeSubtotal(groupRows, dedupeSpend),
+    }));
+    if (selectedSubtotalValues.length > 0) {
+      hiddenGroupCount =
+        entries.length - entries.filter((e) => selectedSubtotalValues.includes(e.key)).length;
+      entries = entries.filter((e) => selectedSubtotalValues.includes(e.key));
+    }
+    entries.sort((a, b) => b.subtotal.spend - a.subtotal.spend);
+    bodyRows = entries.map(({ key, groupRows, subtotal }) => (
+      <Fragment key={key}>
+        {!subtotalsCollapsed &&
+          groupRows.map((r, i) => (
+            <ResultRow key={i} r={r} dimKeys={dimKeys} funnel={funnel} cell={cell} />
+          ))}
+        <SubtotalRow
+          metrics={subtotal}
+          dims={groupRows[0].dims ?? {}}
+          subtotalDim={subtotalDim}
+          dimKeys={dimKeys}
+          funnel={funnel}
+          bgcolor={hdr.bgcolor}
+        />
+      </Fragment>
+    ));
+  } else {
+    bodyRows = rows.map((r, i) => <ResultRow key={i} r={r} dimKeys={dimKeys} funnel={funnel} cell={cell} />);
+  }
 
   return (
     <Box>
@@ -222,6 +371,69 @@ function ResultsView({ report }: { report: RoiReport }) {
 
       {mq && <MatchPanel mq={mq} />}
 
+      {/* subtotal grouping — only meaningful with two active breakdown levels */}
+      {hasSecondLevel && (
+        <Box
+          sx={{
+            mb: 1.5,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 1,
+          }}
+        >
+          <Box>
+            <FieldLabel>Sub-total by</FieldLabel>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+              <ToggleChip label="None" active={subtotalLevel === null} onClick={() => setSubtotalLevel(null)} />
+              <ToggleChip
+                label={DIM_LABEL[groupDims[0]] ?? groupDims[0]}
+                active={subtotalLevel === 1}
+                onClick={() => setSubtotalLevel(1)}
+              />
+              <ToggleChip
+                label={DIM_LABEL[groupDims[1]] ?? groupDims[1]}
+                active={subtotalLevel === 2}
+                onClick={() => setSubtotalLevel(2)}
+              />
+            </Box>
+          </Box>
+          {subtotalDim && (
+            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end", flexWrap: "wrap" }}>
+              {subtotalValueOptions.length > 0 && (
+                <MultiSelectFilter
+                  label="Show"
+                  options={subtotalValueOptions}
+                  selected={selectedSubtotalValues}
+                  onChange={setSelectedSubtotalValues}
+                  emptyLabel={`All ${DIM_LABEL[subtotalDim] ?? subtotalDim}`}
+                  selectedLabel={(n, total) => `${n} of ${total} selected`}
+                />
+              )}
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setSubtotalsCollapsed(!subtotalsCollapsed)}
+                startIcon={
+                  subtotalsCollapsed ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />
+                }
+                sx={{ fontSize: 12, fontWeight: 700, textTransform: "none" }}
+              >
+                {subtotalsCollapsed ? "Expand rows" : "Collapse rows"}
+              </Button>
+            </Box>
+          )}
+        </Box>
+      )}
+      {hiddenGroupCount > 0 && (
+        <Typography sx={{ fontSize: 10.5, color: "text.disabled", mb: 1.5 }}>
+          {hiddenGroupCount} {DIM_LABEL[subtotalDim as string] ?? subtotalDim} value
+          {hiddenGroupCount === 1 ? "" : "s"} hidden by the filter — the Total row below still
+          reflects the full report.
+        </Typography>
+      )}
+
       {rows.length === 0 ? (
         <EmptyHint>No rows for this window and breakdown.</EmptyHint>
       ) : (
@@ -251,9 +463,7 @@ function ResultsView({ report }: { report: RoiReport }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((r, i) => (
-                <ResultRow key={i} r={r} dimKeys={dimKeys} funnel={funnel} cell={cell} />
-              ))}
+              {bodyRows}
               {t && <TotalRow t={t} dimKeys={dimKeys} funnel={funnel} hdrBg={hdr.bgcolor} />}
             </TableBody>
           </Table>
@@ -318,6 +528,128 @@ function TotalRow({
       {cell(
         <Box component="span" sx={{ color: t.value_per_dollar ? "success.main" : undefined }}>
           {perDollar(t.value_per_dollar)}
+        </Box>,
+      )}
+    </TableRow>
+  );
+}
+
+// A subtotal's aggregated metrics — every field here is either a plain sum
+// across the group's rows (leads/opps/pipeline/won — each lead or opportunity
+// belongs to exactly one detail row, so collapsing a dimension never
+// double-counts them) or, for spend, a sum *unless* the group's rows share an
+// identical repeated spend value (see the dedupe note where this is built).
+interface SubtotalMetrics {
+  spend: number;
+  leads: number;
+  mqls: number;
+  sals: number;
+  sqls: number;
+  opportunities: number;
+  closed_won: number;
+  open_pipeline_value: number;
+  won_value: number;
+  value_per_dollar: number | null;
+  cost_per_lead: number | null;
+  cost_per_mql: number | null;
+  cost_per_sal: number | null;
+  cost_per_sql: number | null;
+  cost_per_opportunity: number | null;
+  cost_per_won: number | null;
+}
+
+function computeSubtotal(groupRows: RoiRow[], dedupeSpend: boolean): SubtotalMetrics {
+  const sum = (f: (r: RoiRow) => number) => groupRows.reduce((a, r) => a + (f(r) || 0), 0);
+  const spend = dedupeSpend ? groupRows[0].spend : sum((r) => r.spend);
+  const leads = sum((r) => r.leads);
+  const mqls = sum((r) => r.mqls);
+  const sals = sum((r) => r.sals);
+  const sqls = sum((r) => r.sqls);
+  const opportunities = sum((r) => r.opportunities);
+  const closed_won = sum((r) => r.closed_won);
+  const open_pipeline_value = sum((r) => r.open_pipeline_value);
+  const won_value = sum((r) => r.won_value);
+  const attributed_value = sum((r) => r.attributed_value);
+  const per = (n: number) => (spend && n ? spend / n : null);
+  return {
+    spend,
+    leads,
+    mqls,
+    sals,
+    sqls,
+    opportunities,
+    closed_won,
+    open_pipeline_value,
+    won_value,
+    value_per_dollar: spend ? Math.round((attributed_value / spend) * 100) / 100 : null,
+    cost_per_lead: per(leads),
+    cost_per_mql: per(mqls),
+    cost_per_sal: per(sals),
+    cost_per_sql: per(sqls),
+    cost_per_opportunity: per(opportunities),
+    cost_per_won: per(closed_won),
+  };
+}
+
+// Subtotal row — one per distinct value of the chosen subtotal dimension,
+// inserted after that group's detail rows. The collapsed (other) dimension's
+// column shows a muted "Subtotal" label instead of a value.
+function SubtotalRow({
+  metrics,
+  dims,
+  subtotalDim,
+  dimKeys,
+  funnel,
+  bgcolor,
+}: {
+  metrics: SubtotalMetrics;
+  dims: Record<string, string>;
+  subtotalDim: string;
+  dimKeys: string[];
+  funnel: Set<string>;
+  bgcolor: string;
+}) {
+  const cell = (v: ReactNode) => (
+    <TableCell
+      align="right"
+      sx={{ fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}
+    >
+      {v}
+    </TableCell>
+  );
+  return (
+    <TableRow sx={{ bgcolor, "& td": { borderTop: 1, borderColor: "divider" } }}>
+      {dimKeys.map((k) => (
+        <TableCell
+          key={k}
+          sx={{
+            fontSize: 12,
+            fontWeight: k === subtotalDim ? 700 : 500,
+            color: k === subtotalDim ? "text.primary" : "text.disabled",
+            fontStyle: k === subtotalDim ? "normal" : "italic",
+          }}
+        >
+          {k === subtotalDim ? (dims[k] ?? "—") : "Subtotal"}
+        </TableCell>
+      ))}
+      {cell(usd(metrics.spend))}
+      {cell(num(metrics.leads))}
+      {funnel.has("mql") && cell(num(metrics.mqls))}
+      {funnel.has("sal") && cell(num(metrics.sals))}
+      {funnel.has("sql") && cell(num(metrics.sqls))}
+      {cell(num(metrics.opportunities))}
+      {funnel.has("closed_won") && cell(num(metrics.closed_won))}
+      {cell(usd(metrics.open_pipeline_value))}
+      {cell(usd(metrics.won_value))}
+      {funnel.has("lead") && cell(usd(metrics.cost_per_lead))}
+      {funnel.has("mql") && cell(usd(metrics.cost_per_mql))}
+      {funnel.has("sal") && cell(usd(metrics.cost_per_sal))}
+      {funnel.has("sql") && cell(usd(metrics.cost_per_sql))}
+      {funnel.has("opportunity") && cell(usd(metrics.cost_per_opportunity))}
+      {funnel.has("closed_won") && cell(usd(metrics.cost_per_won))}
+      {cell(
+        <Box component="span" sx={{ color: metrics.value_per_dollar ? "success.main" : undefined }}>
+          {perDollar(metrics.value_per_dollar)}
         </Box>,
       )}
     </TableRow>

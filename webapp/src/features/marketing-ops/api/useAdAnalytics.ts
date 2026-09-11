@@ -84,14 +84,20 @@ function dashboardConfig(platform: AdPlatform, window: DateWindow) {
   return { platform, window, exclude_internal_emails: EXCLUDE_INTERNAL };
 }
 
-function roiConfig(window: DateWindow, groupBy: GroupByDim): RoiConfigBody {
+function roiConfig(
+  window: DateWindow,
+  groupBy: GroupByDim,
+  secondGroupBy: GroupByDim | null,
+  regionFilter: string[],
+  productFilter: string[],
+): RoiConfigBody {
   return {
     name: "Ad-hoc report",
     window,
-    group_by: [groupBy],
+    group_by: secondGroupBy ? [groupBy, secondGroupBy] : [groupBy],
     value_metric: { basis: "product_matched_arr", opp_scope: ["open_pipeline", "closed_won"] },
     funnel_stages: ["lead", "mql", "sal", "sql", "opportunity", "closed_won"],
-    filters: { lead_source_details: [], regions: [] },
+    filters: { lead_source_details: [], regions: regionFilter, products: productFilter },
     exclude_internal_emails: EXCLUDE_INTERNAL,
   };
 }
@@ -169,14 +175,32 @@ export function useAdDashboard(platform: AdPlatform, window: DateWindow) {
 }
 
 // POST /roi/run — the Google UTM ↔ Salesforce join. Not fetched for LinkedIn.
-// `groupBy` is part of the key, so changing the breakdown re-runs only this
-// report and leaves the dashboard alone.
-export function useRoiReport(platform: AdPlatform, window: DateWindow, groupBy: GroupByDim) {
+// `groupBy`/`secondGroupBy`/the region+product filters are all part of the key,
+// so changing any of them re-runs only this report and leaves the dashboard
+// alone. Region/product filters are sets, not sequences — sort them so a
+// re-order of the same selection doesn't look like a different key (or refetch).
+export function useRoiReport(
+  platform: AdPlatform,
+  window: DateWindow,
+  groupBy: GroupByDim,
+  secondGroupBy: GroupByDim | null = null,
+  regionFilter: string[] = [],
+  productFilter: string[] = [],
+) {
   const url = marketingOpsServiceUrls.adAnalyticsRoiRun;
   return usePostReport<{ config: RoiConfigBody }, RoiReport>(
-    ["marketing-ops", "ad-analytics", "roi", window, groupBy],
+    [
+      "marketing-ops",
+      "ad-analytics",
+      "roi",
+      window,
+      groupBy,
+      secondGroupBy,
+      [...regionFilter].sort(),
+      [...productFilter].sort(),
+    ],
     url,
-    { config: roiConfig(window, groupBy) },
+    { config: roiConfig(window, groupBy, secondGroupBy, regionFilter, productFilter) },
     roiSupported(platform) && windowReady(window),
     (r) => throwIfReportFailed(r, url, "Report generation failed"),
   );
@@ -196,10 +220,8 @@ export function useLinkedInRoiReport(platform: AdPlatform, window: DateWindow) {
   );
 }
 
-// GET /roi/options — selector options for the report controls. Not currently
-// rendered (the ported UI exposes only the breakdown selector), but the endpoint
-// is the one read in this operation that is a real GET, and the filters it powers
-// are the obvious next thing to surface.
+// GET /roi/options — selector options (regions/products actually present in the
+// data) for the ROI tab's Business unit / Region multi-select filters.
 export function useRoiOptions(enabled = true) {
   const { isSignedIn } = useAsgardeo();
   const getAccessToken = useAccessToken();

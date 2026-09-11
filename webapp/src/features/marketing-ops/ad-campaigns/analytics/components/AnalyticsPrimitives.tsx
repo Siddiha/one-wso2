@@ -15,7 +15,17 @@
 // under the License.
 
 import type { ReactNode } from "react";
-import { Box, CircularProgress, Stack, Typography } from "@wso2/oxygen-ui";
+import {
+  Box,
+  Checkbox,
+  CircularProgress,
+  ListItemText,
+  MenuItem,
+  OutlinedInput,
+  Select,
+  Stack,
+  Typography,
+} from "@wso2/oxygen-ui";
 
 // The pieces the three analytics views share. Marketing Ops had these duplicated
 // across MarketingDashboard / RoiReporting / LinkedInRoiReporting — three copies
@@ -161,6 +171,59 @@ export function ToggleChip({
       }}
     >
       {label}
+    </Box>
+  );
+}
+
+// Multi-value filter (region / business unit, and the ROI subtotal "Show"
+// filter) — narrows the underlying data before any breakdown grouping is
+// applied. Empty selection = no filter (all values). Ported from Marketing
+// Ops' MultiFilter, rebuilt on Oxygen UI's Select instead of raw MUI.
+export function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  // Overrides for the ROI subtotal "Show" filter, whose placeholder/count text
+  // names the subtotal dimension rather than repeating the field label (e.g.
+  // field label "Show", placeholder "All Region", count "2 of 5 selected").
+  emptyLabel,
+  selectedLabel,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+  emptyLabel?: string;
+  selectedLabel?: (count: number, total: number) => string;
+}) {
+  return (
+    <Box>
+      <FieldLabel>{label}</FieldLabel>
+      <Select
+        multiple
+        size="small"
+        displayEmpty
+        value={selected}
+        onChange={(e) => {
+          const v = e.target.value as string | string[];
+          onChange(typeof v === "string" ? v.split(",") : v);
+        }}
+        input={<OutlinedInput />}
+        renderValue={(sel) => {
+          const arr = sel as string[];
+          if (arr.length === 0) return emptyLabel ?? `All ${label.toLowerCase()}s`;
+          return selectedLabel ? selectedLabel(arr.length, options.length) : `${arr.length} selected`;
+        }}
+        sx={{ fontSize: 12.5, minWidth: 170 }}
+      >
+        {options.map((o) => (
+          <MenuItem key={o} value={o} dense>
+            <Checkbox checked={selected.includes(o)} size="small" sx={{ py: 0 }} />
+            <ListItemText primary={o} primaryTypographyProps={{ fontSize: 13 }} />
+          </MenuItem>
+        ))}
+      </Select>
     </Box>
   );
 }
