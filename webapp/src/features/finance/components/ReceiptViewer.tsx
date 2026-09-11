@@ -90,13 +90,24 @@ export function ReceiptViewer({
           <Alert severity="error">Couldn't load the file. {error}</Alert>
         ) : source ? (
           isPdf ? (
-            <Box component="iframe" title={title} src={source.url} sx={{ width: "100%", height: 460, border: 0 }} />
+            <Box
+              component="iframe"
+              title={title}
+              src={source.url}
+              sx={{ width: "100%", height: "min(78vh, 900px)", border: 0 }}
+            />
           ) : isImage ? (
             <Box
               component="img"
               alt={title}
               src={source.url}
-              sx={{ display: "block", maxWidth: "100%", maxHeight: 460, mx: "auto", objectFit: "contain" }}
+              sx={{
+                display: "block",
+                maxWidth: "100%",
+                maxHeight: "min(78vh, 900px)",
+                mx: "auto",
+                objectFit: "contain",
+              }}
             />
           ) : (
             <Alert severity="info">

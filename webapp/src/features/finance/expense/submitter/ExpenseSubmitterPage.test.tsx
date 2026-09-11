@@ -303,10 +303,9 @@ describe("a saved draft is offered, not assumed", () => {
       expect(screen.queryByRole("button", { name: "Restore Draft" })).not.toBeInTheDocument();
     });
 
-    // The draft table is keyed on the caller's email alone, so there is one
-    // slot per person: adding a line for anyone overwrites it. The warning
-    // therefore has to appear even where restoring is not on offer.
-    it("still warns that adding a line will destroy it", async () => {
+    // The warning tracks the Restore button: it is about the draft on offer
+    // right here, so both appear together once that colleague is picked.
+    it("warns that adding a line will destroy it", async () => {
       show();
       fireEvent.change(await screen.findByLabelText("Submitting for"), { target: { value: "Grace" } });
       fireEvent.click(await screen.findByText("Grace Hopper"));
@@ -317,14 +316,37 @@ describe("a saved draft is offered, not assumed", () => {
       expect(screen.queryByLabelText("Amount")).not.toBeInTheDocument();
     });
 
-    it("is not offered even once that colleague is picked", async () => {
+    // DELIBERATE deviation from NewClaim.tsx:200, which warns whenever any
+    // draft exists. Here the warning tracks the Restore button, so under
+    // "Myself" there is neither — and because the draft table is keyed on the
+    // caller's email alone, adding a line here DOES destroy the colleague's
+    // draft, silently. Asserted so the trade-off is recorded, not stumbled on.
+    it("gives no warning under Myself, where it is not on offer", async () => {
+      show();
+      await screen.findByText(/haven't added any expenses yet/);
+      expect(screen.queryByRole("button", { name: "Restore Draft" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "+ Add expense" }));
+      expect(await screen.findByLabelText("Amount")).toBeInTheDocument();
+      expect(screen.queryByText("Draft Deletion Warning")).not.toBeInTheDocument();
+    });
+
+    it("is offered once that colleague is picked", async () => {
       show();
       fireEvent.change(await screen.findByLabelText("Submitting for"), { target: { value: "Grace" } });
       fireEvent.click(await screen.findByText("Grace Hopper"));
 
-      await waitFor(() =>
-        expect(screen.queryByRole("button", { name: "Restore Draft" })).not.toBeInTheDocument(),
-      );
+      expect(await screen.findByRole("button", { name: "Restore Draft" })).toBeInTheDocument();
+    });
+
+    it("restores their lines under their name", async () => {
+      show();
+      fireEvent.change(await screen.findByLabelText("Submitting for"), { target: { value: "Grace" } });
+      fireEvent.click(await screen.findByText("Grace Hopper"));
+      fireEvent.click(await screen.findByRole("button", { name: "Restore Draft" }));
+
+      expect(await screen.findByText("(for Grace Hopper)")).toBeInTheDocument();
+      expect(screen.getByText("EXPENSE ITEM 1")).toBeInTheDocument();
     });
   });
 

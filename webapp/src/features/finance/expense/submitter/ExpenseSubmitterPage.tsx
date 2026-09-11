@@ -176,35 +176,17 @@ function SubmitterBody() {
     }));
   }, [appData.data]);
 
-  // Restoring is offered for your OWN draft only — you are filing for
-  // yourself, and the draft was saved for yourself. Restoring an on-behalf
-  // draft is not supported yet, so the button stays away from that case
-  // entirely rather than half-working.
+  // A draft belongs to whoever it was being filed FOR, so it is offered
+  // against that person and nobody else — `NewClaim.tsx:53` does the same.
   //
-  // Both halves matter. Without the first, a colleague's draft appeared on
-  // your own empty claim and restoring it silently switched the picker to
-  // them; without the second, picking a colleague would offer a restore this
-  // screen cannot honour.
-  //
-  // Saving is unaffected: an on-behalf claim still autosaves with its
-  // `onBehalfOfEmail`, so nothing is lost — it just cannot be restored here.
+  // That is what fixes the reported bug: a draft saved for a colleague no
+  // longer appears on your own empty claim, where restoring it used to switch
+  // the picker to them unasked. Pick that colleague and it is offered, because
+  // then it really is the draft in front of you.
   const draftOffered =
-    items.length === 0 &&
-    savedDraft.length > 0 &&
-    onBehalfOfEmail === null &&
-    savedDraftOnBehalfOf === null;
+    items.length === 0 && savedDraft.length > 0 && onBehalfOfEmail === savedDraftOnBehalfOf;
 
-  /**
-   * Whether starting a line would destroy a stored draft — independent of who
-   * the claim is for, and of whether that draft can be restored here.
-   *
-   * `expense_claim_draft` is keyed on the caller's email alone
-   * (`WHERE email = ${userEmail}`), so a person has exactly ONE draft slot.
-   * Adding a line autosaves into that slot and overwrites whatever was there,
-   * including a draft saved for a colleague. Gating the warning on
-   * `draftOffered` meant picking an employee silently discarded it.
-   */
-  const draftAtRisk = items.length === 0 && savedDraft.length > 0;
+
 
   const draftState = useDraftAutosave(JSON.stringify(items), appData.isSuccess, async () => {
     if (items.length > 0) {
@@ -363,10 +345,13 @@ function SubmitterBody() {
               <Button
                 variant="contained"
                 onClick={() => {
-                  // Gated on `draftAtRisk`, NOT `draftOffered`: a draft you
-                  // cannot restore here is still a draft this line will
-                  // destroy, so the warning has to come either way.
-                  if (draftAtRisk) {
+                  // Same condition as the Restore button, so the two always
+                  // agree: you are warned about the draft you were offered,
+                  // and never about one that is not on the screen.
+                  //
+                  // A DEVIATION from NewClaim.tsx:200, which warns whenever any
+                  // draft exists. See the test below for what that costs.
+                  if (draftOffered) {
                     setConfirmingDraftLoss(true);
                     return;
                   }
