@@ -303,8 +303,6 @@ describe("a saved draft is offered, not assumed", () => {
       expect(screen.queryByRole("button", { name: "Restore Draft" })).not.toBeInTheDocument();
     });
 
-    // The warning tracks the Restore button: it is about the draft on offer
-    // right here, so both appear together once that colleague is picked.
     it("warns that adding a line will destroy it", async () => {
       show();
       fireEvent.change(await screen.findByLabelText("Submitting for"), { target: { value: "Grace" } });
@@ -316,19 +314,29 @@ describe("a saved draft is offered, not assumed", () => {
       expect(screen.queryByLabelText("Amount")).not.toBeInTheDocument();
     });
 
-    // DELIBERATE deviation from NewClaim.tsx:200, which warns whenever any
-    // draft exists. Here the warning tracks the Restore button, so under
-    // "Myself" there is neither — and because the draft table is keyed on the
-    // caller's email alone, adding a line here DOES destroy the colleague's
-    // draft, silently. Asserted so the trade-off is recorded, not stumbled on.
-    it("gives no warning under Myself, where it is not on offer", async () => {
+    // NewClaim.tsx:200 warns whenever a draft EXISTS, not only when it can be
+    // restored — so the warning appears under "Myself" too, where the
+    // colleague's draft is not on offer but would still be destroyed.
+    it("warns under Myself as well, where it is not on offer", async () => {
       show();
       await screen.findByText(/haven't added any expenses yet/);
       expect(screen.queryByRole("button", { name: "Restore Draft" })).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "+ Add expense" }));
-      expect(await screen.findByLabelText("Amount")).toBeInTheDocument();
-      expect(screen.queryByText("Draft Deletion Warning")).not.toBeInTheDocument();
+      expect(await screen.findByText("Draft Deletion Warning")).toBeInTheDocument();
+      // Filing as yourself, so nobody else is named.
+      expect(screen.queryByText(/Grace Hopper/)).not.toBeInTheDocument();
+    });
+
+    // Filing for someone else, the warning says whose claim it is.
+    it("names who the claim is for when one is picked", async () => {
+      show();
+      fireEvent.change(await screen.findByLabelText("Submitting for"), { target: { value: "Grace" } });
+      fireEvent.click(await screen.findByText("Grace Hopper"));
+
+      fireEvent.click(await screen.findByRole("button", { name: "+ Add expense" }));
+      expect(await screen.findByText("Draft Deletion Warning")).toBeInTheDocument();
+      expect(screen.getByText(/Grace Hopper/)).toBeInTheDocument();
     });
 
     it("is offered once that colleague is picked", async () => {

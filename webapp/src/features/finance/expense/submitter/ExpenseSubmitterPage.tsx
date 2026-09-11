@@ -186,6 +186,18 @@ function SubmitterBody() {
   const draftOffered =
     items.length === 0 && savedDraft.length > 0 && onBehalfOfEmail === savedDraftOnBehalfOf;
 
+  /**
+   * Whether starting a line would destroy the stored draft — regardless of who
+   * it was saved for, and of whether it can be restored here.
+   *
+   * `NewClaim.tsx:200` gates the warning on `draftClaimItems.length > 0` alone,
+   * while only the Restore button keys off the owner matching. So the warning
+   * legitimately appears where the button does not: the draft table is keyed
+   * on the caller's email alone, giving one slot per person, and a new line
+   * overwrites whatever is in it — including a colleague's draft.
+   */
+  const draftAtRisk = items.length === 0 && savedDraft.length > 0;
+
 
 
   const draftState = useDraftAutosave(JSON.stringify(items), appData.isSuccess, async () => {
@@ -348,10 +360,7 @@ function SubmitterBody() {
                   // Same condition as the Restore button, so the two always
                   // agree: you are warned about the draft you were offered,
                   // and never about one that is not on the screen.
-                  //
-                  // A DEVIATION from NewClaim.tsx:200, which warns whenever any
-                  // draft exists. See the test below for what that costs.
-                  if (draftOffered) {
+                  if (draftAtRisk) {
                     setConfirmingDraftLoss(true);
                     return;
                   }
@@ -566,7 +575,14 @@ function SubmitterBody() {
         <DialogTitle sx={{ fontSize: 17, fontWeight: 700 }}>Draft Deletion Warning</DialogTitle>
         <DialogContent dividers>
           <Typography sx={{ fontSize: 13.5 }}>
-            Adding a new claim will delete your draft. Are you sure you want to proceed?
+            {onBehalfOfName ? (
+              <>
+                Adding a new claim for <b>{onBehalfOfName}</b> will delete your draft. Are you sure
+                you want to proceed?
+              </>
+            ) : (
+              <>Adding a new claim will delete your draft. Are you sure you want to proceed?</>
+            )}
           </Typography>
         </DialogContent>
         <DialogActions>
