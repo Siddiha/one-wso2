@@ -34,7 +34,12 @@ vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "tok
 vi.mock("@asgardeo/react", () => ({ useAsgardeo: () => ({ isSignedIn: true }) }));
 
 const draftLine = {
-  date: "2026-08-10",
+  // Derived from the clock, not hardcoded: the form refuses a bill date older
+  // than `pastDateRestrictionDays` (30 in this fixture), so a fixed date makes
+  // every test that EDITS this line start failing once that many days pass —
+  // Save stays disabled, the dialog never closes, and the failure looks like a
+  // missing button rather than an expired fixture.
+  date: localIsoDateOffset(-5),
   amount: 40,
   currency: "USD",
   currencyConversionRate: 300,
@@ -48,7 +53,9 @@ const draftLine = {
 };
 
 const state = {
-  draft: null as { transactions: unknown[] } | null,
+  // `onBehalfOfEmail` is part of the saved draft on the wire (`types.bal:26-31`)
+  // — who it was being filed for, which decides whether this form may offer it.
+  draft: null as { transactions: unknown[]; onBehalfOfEmail?: string | null } | null,
   managerEmail: "lead@wso2.com" as string | null,
   employees: [
     { workEmail: "lead@wso2.com", firstName: "Ada", lastName: "Lovelace", employeeThumbnail: null },
@@ -153,6 +160,27 @@ describe("a saved draft is offered, not assumed", () => {
 
   it("warns before a new line discards the draft", async () => {
     state.draft = { transactions: [draftLine] };
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "+ Add expense" }));
+    expect(await screen.findByText("Draft Deletion Warning")).toBeInTheDocument();
+  });
+
+  // NewClaim.tsx:53 — `canRestoreDraft` also requires the draft to belong to
+  // whoever the form is filing for. This form only ever files the reader's own
+  // claim, so a draft saved while filing FOR somebody else is not offered: its
+  // lines carry that person's job numbers and would be filed as the reader's
+  // own spend.
+  it("does not offer a draft that was being filed for somebody else", async () => {
+    state.draft = { transactions: [draftLine], onBehalfOfEmail: "yukthi@wso2.com" };
+    show();
+    await screen.findByText(/No expenses yet/);
+    expect(screen.queryByRole("button", { name: "Restore Draft" })).not.toBeInTheDocument();
+  });
+
+  // One draft slot per person, shared with the submitter screen: adding a line
+  // here overwrites it whoever it belonged to, so the warning still stands.
+  it("still warns before discarding somebody else's draft", async () => {
+    state.draft = { transactions: [draftLine], onBehalfOfEmail: "yukthi@wso2.com" };
     show();
     fireEvent.click(await screen.findByRole("button", { name: "+ Add expense" }));
     expect(await screen.findByText("Draft Deletion Warning")).toBeInTheDocument();

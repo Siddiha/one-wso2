@@ -135,7 +135,24 @@ function NewClaimBody() {
     );
   }, [appData.data, reimbursementCurrency]);
 
-  const draftOffered = items.length === 0 && savedDraft.length > 0;
+  /**
+   * `/app-data` says WHO a saved draft was being filed for — the backend's
+   * `ExpenseClaimDraft.onBehalfOfEmail` (`types.bal:26-31`). The shared
+   * `ExpenseAppData` does not name the field (`expenseSubmitterTypes.ts`
+   * describes the fuller shape), so it is read narrowly here rather than by
+   * widening a type the approvals screens also depend on.
+   */
+  const savedDraftOnBehalfOf =
+    (appData.data?.draft as { onBehalfOfEmail?: string | null } | null | undefined)?.onBehalfOfEmail ??
+    null;
+  // There is ONE draft slot per person, shared with the submitter screen.
+  const draftExists = savedDraft.length > 0;
+  // NewClaim.tsx:53 — `canRestoreDraft` requires the draft to have been filed
+  // for whoever the form is filing for now. This form is always the reader's
+  // own claim, so a draft saved while filing FOR somebody else is not theirs
+  // to restore: its lines carry that employee's job numbers and expense types,
+  // and submitting them here would file that person's spend as the reader's.
+  const draftOffered = items.length === 0 && draftExists && savedDraftOnBehalfOf === null;
 
   const draftState = useDraftAutosave(JSON.stringify(items), appData.isSuccess, async () => {
     if (items.length > 0) await draft.save.mutateAsync(items.map(toPayload));
@@ -196,8 +213,9 @@ function NewClaimBody() {
             size="small"
             variant="outlined"
             onClick={() => {
-              // :187-193 — starting a new line discards the saved draft.
-              if (draftOffered) {
+              // :187-193 — starting a new line discards the saved draft,
+              // whoever it was being filed for: there is one slot per person.
+              if (items.length === 0 && draftExists) {
                 setConfirmingDraftLoss(true);
                 return;
               }
