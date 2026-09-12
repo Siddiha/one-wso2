@@ -18,8 +18,11 @@ import { useRef, useState } from "react";
 import {
   Box,
   Button,
-  Chip,
+  ButtonBase,
+  Divider,
   FormControl,
+  IconButton,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Popover,
@@ -28,10 +31,11 @@ import {
   TextField,
   Typography,
 } from "@wso2/oxygen-ui";
-import { CalendarIcon, FilterIcon } from "@wso2/oxygen-ui-icons-react";
+import { CalendarIcon, FileSearchIcon, FilterIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import { EXPENSE_FILTERABLE_STATUSES, type ExpenseClaimStatus } from "../expenseTypes";
 import { expenseStatusMeta } from "../../components/FinanceChips";
 import { todayIso } from "../../util/financeFormat";
+import { ExpenseHistoryDateRange } from "./ExpenseHistoryDateRange";
 import {
   CLAIM_RANGE_CUSTOM,
   CLAIM_RANGE_LATEST,
@@ -110,15 +114,38 @@ export function ExpenseHistoryFilters({
         </Select>
       </FormControl>
 
+      {/* The applied window, reading `start ~ end` with the calendar closing the
+          field, and re-opening the picker when clicked — the source's own
+          summary box (`FilterHolder.tsx:120-137`), drawn as an outlined field
+          so it matches the height and the border of the selects beside it. */}
       {hasCustomRange && (
-        <Chip
-          size="small"
-          variant="outlined"
-          icon={<CalendarIcon size={13} />}
-          label={`${filters.startDate} ~ ${filters.endDate}`}
+        <ButtonBase
           onClick={(e) => openRange(e.currentTarget)}
-          sx={{ fontSize: 11.5 }}
-        />
+          aria-label={`Claim range ${filters.startDate} to ${filters.endDate}`}
+          sx={{
+            height: 40,
+            px: 1.5,
+            gap: 1,
+            border: 1,
+            borderColor: "divider",
+            // The numbers Oxygen's own outlined inputs are built from, so this
+            // sits in the row as one of them: 8px corners, a divider-coloured
+            // hairline, and the paper ground that `MuiOutlinedInput` paints.
+            // The background has to be the CSS variable rather than
+            // `background.paper` — under CssVarsProvider the palette accessor
+            // freezes the light scheme's hex and the box would stay white in
+            // dark mode (see `brandTheme.ts`).
+            borderRadius: "8px",
+            backgroundColor: "var(--oxygen-palette-background-paper)",
+            color: "text.secondary",
+            "&:hover": { borderColor: "text.primary" },
+          }}
+        >
+          <Typography sx={{ fontSize: 13 }}>
+            {filters.startDate} ~ {filters.endDate}
+          </Typography>
+          <CalendarIcon size={15} />
+        </ButtonBase>
       )}
 
       <FormControl size="small">
@@ -174,9 +201,21 @@ export function ExpenseHistoryFilters({
         onClose={() => setRangeAnchor(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       >
-        <Box sx={{ p: 2, width: 280 }}>
-          <Typography sx={{ fontSize: 12.5, fontWeight: 700, mb: 1.5 }}>Custom date range</Typography>
-          <Stack spacing={1.5}>
+        <Box sx={{ p: 2 }}>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 700, mb: 1 }}>Custom date range</Typography>
+          {/* Two ways into the same draft, as the source's `editableDateInputs`
+              calendar has: the grid for picking a window, the fields for typing
+              a known one. */}
+          <ExpenseHistoryDateRange
+            start={draftStart}
+            end={draftEnd}
+            onSelect={(start, end) => {
+              setDraftStart(start);
+              setDraftEnd(end);
+            }}
+          />
+          <Divider sx={{ my: 1.5 }} />
+          <Stack direction="row" spacing={1}>
             <TextField
               size="small"
               type="date"
@@ -227,13 +266,38 @@ export function ExpenseHistoryFilters({
         onClose={() => setMoreAnchor(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       >
-        <Box sx={{ p: 2, width: 280 }}>
+        <Box sx={{ p: 2, width: 300 }}>
+          {/* The popover names itself, as the source's menu does
+              (`FilterHolder.tsx:213-215`). */}
+          <Typography sx={{ fontSize: 14, fontWeight: 700, mb: 1.75 }}>Filters</Typography>
           <Stack spacing={1.75}>
             <TextField
               size="small"
               label="Filter by claim ID"
               value={draftClaimId}
               onChange={(e) => setDraftClaimId(e.target.value)}
+              slotProps={{
+                input: {
+                  // A claim ID is long enough to be worth clearing in one go
+                  // rather than backspacing — the source swaps its search
+                  // adornment for a clear button the moment there is text.
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      {draftClaimId.length > 0 ? (
+                        <IconButton
+                          size="small"
+                          aria-label="Clear claim ID"
+                          onClick={() => setDraftClaimId("")}
+                        >
+                          <XIcon size={15} />
+                        </IconButton>
+                      ) : (
+                        <FileSearchIcon size={15} opacity={0.6} />
+                      )}
+                    </InputAdornment>
+                  ),
+                },
+              }}
             />
             {/* FilterHolder.tsx:285 — only shown to someone who can file for
                 others; for everyone else every claim is their own. */}
@@ -255,7 +319,7 @@ export function ExpenseHistoryFilters({
               </FormControl>
             )}
           </Stack>
-          <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: 2 }}>
+          <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mt: 2.5 }}>
             <Button size="small" onClick={() => setMoreAnchor(null)}>
               Cancel
             </Button>

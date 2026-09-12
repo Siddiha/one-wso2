@@ -226,6 +226,49 @@ describe("the custom date range", () => {
     expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
   });
 
+  // FilterHolder.tsx:141-152 — the source picks the window on a calendar, two
+  // clicks to a range, and never past today. Dates are derived from the clock
+  // rather than hardcoded so the suite does not expire.
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  it("picks a window from two clicks on the calendar", async () => {
+    await openRange();
+    const now = new Date();
+    const first = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+    const today = iso(now);
+
+    fireEvent.click(screen.getByLabelText(first));
+    fireEvent.click(screen.getByLabelText(today));
+    // The grid fills the same draft the two fields hold.
+    expect(screen.getByLabelText("From")).toHaveValue(first);
+    expect(screen.getByLabelText("To")).toHaveValue(today);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(lastPayload().startDate).toBe(first));
+    expect(lastPayload().endDate).toBe(today);
+  });
+
+  it("reads a backwards pair of clicks as a range, not as an error", async () => {
+    await openRange();
+    const now = new Date();
+    const first = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+    const today = iso(now);
+
+    // Clicking the later day first still commits start-before-end.
+    fireEvent.click(screen.getByLabelText(today));
+    fireEvent.click(screen.getByLabelText(first));
+    expect(screen.getByLabelText("From")).toHaveValue(first);
+    expect(screen.getByLabelText("To")).toHaveValue(today);
+  });
+
+  it("offers no day past today", async () => {
+    await openRange();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    expect(screen.getByLabelText(iso(tomorrow))).toBeDisabled();
+  });
+
   it("clears the window when the range goes back to Latest 100", async () => {
     await openRange();
     fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-08-01" } });
@@ -262,6 +305,16 @@ describe("the Filters popover", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByLabelText("Filter by claim ID")).not.toBeInTheDocument());
     expect(lastPayload().ids).toBeUndefined();
+  });
+
+  it("empties the claim ID in one go", async () => {
+    show();
+    await screen.findByText("EXP-me-001");
+    fireEvent.mouseDown(screen.getByLabelText("Filters"));
+    const field = await screen.findByLabelText("Filter by claim ID");
+    fireEvent.change(field, { target: { value: "EXP-me-001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Clear claim ID" }));
+    expect(field).toHaveValue("");
   });
 
   // FilterHolder.tsx:285 — offered only to someone who can file for others.
