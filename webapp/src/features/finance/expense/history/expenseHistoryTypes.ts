@@ -47,6 +47,31 @@ export function submissionScopeLabel(scope: ClaimSubmissionScope): string {
   }
 }
 
+/**
+ * utils.ts#getOnBehalfOfParty — an on-behalf claim has two people on it, and
+ * which one is worth naming depends on which side of it the viewer sits.
+ * If they filed it, the claim is one they submitted FOR the employee; if
+ * somebody else filed it, it was submitted BY that person. Either way the
+ * party named is the other person, never the viewer. Null for an own claim.
+ */
+export interface OnBehalfOfParty {
+  label: "Submitted for" | "Submitted by";
+  /** The other party's work email — resolve it to a name for display. */
+  email: string;
+}
+
+export function onBehalfOfParty(
+  claim: HistoryClaim,
+  viewerEmail: string | null | undefined,
+): OnBehalfOfParty | null {
+  if (!isOnBehalfOfClaim(claim)) return null;
+  // An unknown viewer reads as "somebody else filed this", which is the same
+  // branch the source takes when its `userEmail` has not arrived yet.
+  return Boolean(viewerEmail) && claim.submittedBy === viewerEmail
+    ? { label: "Submitted for", email: claim.employeeEmail }
+    : { label: "Submitted by", email: claim.submittedBy! };
+}
+
 export interface HistorySearchPayload extends ExpenseClaimSearchPayload {
   submissionScope?: ClaimSubmissionScope;
 }
@@ -55,6 +80,20 @@ export interface HistorySearchPayload extends ExpenseClaimSearchPayload {
 export interface HistoryAppData extends ExpenseAppData {
   onBehalfOfEmployees?: string[];
 }
+
+/**
+ * The Status menu, in the source's own order — `Object.values(ClaimStatus)`
+ * (`utils/types.ts:24-30`) behind a synthetic "All". The shared
+ * `EXPENSE_FILTERABLE_STATUSES` lists Approved before Finance Rejected and is
+ * left alone: the Me-side history page renders its own filter from it.
+ */
+export const HISTORY_FILTER_STATUSES: ExpenseClaimStatus[] = [
+  "PENDING_LEAD",
+  "LEAD_REJECTED",
+  "PENDING_FINANCE",
+  "FINANCE_REJECTED",
+  "APPROVED",
+];
 
 // FilterHolder.tsx:40 — the range dropdown is two options, not a year list.
 export const CLAIM_RANGE_LATEST = "Latest 100";

@@ -74,10 +74,16 @@ function HistoryBody() {
         <ExpenseHistoryClaimDetails
           claim={selected}
           appData={appData.data}
+          viewerEmail={email}
           onBack={() => setSelected(null)}
           onShowActivity={() => setActivityClaim(selected)}
         />
-        <ExpenseClaimActivityDrawer claim={activityClaim} nameFor={nameFor} onClose={() => setActivityClaim(null)} />
+        <ExpenseClaimActivityDrawer
+          claim={activityClaim}
+          nameFor={nameFor}
+          viewerEmail={email}
+          onClose={() => setActivityClaim(null)}
+        />
       </>
     );
   }
@@ -116,7 +122,12 @@ function HistoryBody() {
         />
       )}
 
-      <ExpenseClaimActivityDrawer claim={activityClaim} nameFor={nameFor} onClose={() => setActivityClaim(null)} />
+      <ExpenseClaimActivityDrawer
+        claim={activityClaim}
+        nameFor={nameFor}
+        viewerEmail={email}
+        onClose={() => setActivityClaim(null)}
+      />
     </Box>
   );
 }

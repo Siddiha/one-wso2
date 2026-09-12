@@ -32,7 +32,7 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { CalendarIcon, FileSearchIcon, FilterIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
-import { EXPENSE_FILTERABLE_STATUSES, type ExpenseClaimStatus } from "../expenseTypes";
+import type { ExpenseClaimStatus } from "../expenseTypes";
 import { expenseStatusMeta } from "../../components/FinanceChips";
 import { todayIso } from "../../util/financeFormat";
 import { ExpenseHistoryDateRange } from "./ExpenseHistoryDateRange";
@@ -40,6 +40,7 @@ import {
   CLAIM_RANGE_CUSTOM,
   CLAIM_RANGE_LATEST,
   CLAIM_SUBMISSION_SCOPES,
+  HISTORY_FILTER_STATUSES,
   submissionScopeLabel,
   type ClaimSubmissionScope,
   type HistoryFilters,
@@ -160,7 +161,7 @@ export function ExpenseHistoryFilters({
           }
         >
           <MenuItem value="All">All</MenuItem>
-          {EXPENSE_FILTERABLE_STATUSES.map((s) => (
+          {HISTORY_FILTER_STATUSES.map((s) => (
             <MenuItem key={s} value={s}>
               {expenseStatusMeta(s).label}
             </MenuItem>

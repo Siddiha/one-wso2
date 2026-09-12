@@ -17,7 +17,7 @@
 import { Box, Stack, Typography } from "@wso2/oxygen-ui";
 import { ReceiptTextIcon, UserRoundIcon, UsersIcon, type LucideIcon } from "@wso2/oxygen-ui-icons-react";
 import { historyDateTime } from "./expenseHistoryFormat";
-import { isOnBehalfOfClaim, type HistoryClaim } from "./expenseHistoryTypes";
+import { onBehalfOfParty, type HistoryClaim } from "./expenseHistoryTypes";
 
 // CustomTimelineItem.tsx — the same three stages and status→colour mapping,
 // laid out by hand (dot + connector) because @mui/lab is not a dependency here
@@ -48,16 +48,25 @@ interface Stage {
  * instance alive across claims, so colours computed once on mount would
  * describe whichever claim happened to be open first.
  */
-export function claimStages(claim: HistoryClaim, nameFor: (email: string | null | undefined) => string = (e) => e ?? ""): Stage[] {
+export function claimStages(
+  claim: HistoryClaim,
+  nameFor: (email: string | null | undefined) => string = (e) => e ?? "",
+  /** Who is reading, so an on-behalf claim names the OTHER party. */
+  viewerEmail?: string | null,
+): Stage[] {
   const s = claim.statusDetails;
   const status = s.status;
 
+  // CustomTimelineItem.tsx:36-40 — the submission stage names the other party
+  // on an on-behalf claim, and which of "for"/"by" it reads depends on whether
+  // the viewer is the one who filed it.
+  const party = onBehalfOfParty(claim, viewerEmail);
   const submission: Stage = {
     label: "Claim Submission",
     Icon: ReceiptTextIcon,
     date: claim.createdDate,
     tone: "success",
-    note: isOnBehalfOfClaim(claim) ? `Submitted for ${nameFor(claim.submittedBy)}` : null,
+    note: party ? `${party.label} ${nameFor(party.email)}` : null,
   };
 
   const lead: Stage =
@@ -73,7 +82,16 @@ export function claimStages(claim: HistoryClaim, nameFor: (email: string | null 
             reason: s.leadRejectedReason,
           }
         : status === "PENDING_FINANCE" || status === "APPROVED" || status === "FINANCE_REJECTED"
-          ? { label: "Lead Review", Icon: UserRoundIcon, date: s.leadApprovedDate, tone: "success" }
+          ? {
+              label: "Lead Review",
+              Icon: UserRoundIcon,
+              // `leadApprovedDate || leadRejectedDate` (CustomTimelineItem.tsx:43)
+              // — the date the lead acted. The fallback matters for a claim that
+              // was rejected and resubmitted, where the approval date can be
+              // absent on a record that has already moved past the lead.
+              date: s.leadApprovedDate || s.leadRejectedDate,
+              tone: "success",
+            }
           : { label: "Lead Review", Icon: UserRoundIcon, date: null, tone: "idle" };
 
   const finance: Stage =
@@ -82,7 +100,14 @@ export function claimStages(claim: HistoryClaim, nameFor: (email: string | null 
       : status === "FINANCE_REJECTED"
         ? { label: "Finance Review", Icon: UsersIcon, date: s.financeRejectedDate, tone: "error", statusLabel: "Rejected" }
         : status === "APPROVED"
-          ? { label: "Finance Review", Icon: UsersIcon, date: s.financeApprovedDate, tone: "success", statusLabel: "Approved" }
+          ? {
+              label: "Finance Review",
+              Icon: UsersIcon,
+              // Same fallback as the lead stage (CustomTimelineItem.tsx:48).
+              date: s.financeApprovedDate || s.financeRejectedDate,
+              tone: "success",
+              statusLabel: "Approved",
+            }
           // Hasn't reached finance yet — still with the lead, or lead-rejected.
           : { label: "Finance Review", Icon: UsersIcon, date: null, tone: "idle" };
 
@@ -92,12 +117,15 @@ export function claimStages(claim: HistoryClaim, nameFor: (email: string | null 
 export function ExpenseClaimTimeline({
   claim,
   nameFor,
+  viewerEmail,
 }: {
   claim: HistoryClaim;
   /** Resolves a work email to a display name; the address stays in tooltips. */
   nameFor?: (email: string | null | undefined) => string;
+  /** The signed-in person, for the on-behalf line on the submission stage. */
+  viewerEmail?: string | null;
 }) {
-  const stages = claimStages(claim, nameFor);
+  const stages = claimStages(claim, nameFor, viewerEmail);
   return (
     <Stack spacing={0}>
       {stages.map((stage, i) => (

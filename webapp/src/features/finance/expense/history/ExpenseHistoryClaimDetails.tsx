@@ -15,6 +15,7 @@
 // under the License.
 
 import { useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   Box,
@@ -44,10 +45,11 @@ import { fetchReceiptObjectUrl, type ReceiptSource } from "../../util/financeRec
 import { useExpenseReceiptUpload, useResubmitExpenseClaim } from "../useExpenseMutations";
 import { useExpenseEmployees } from "../useExpense";
 import { SubmitterLineDialog } from "../submitter/ExpenseSubmitterLineDialog";
+import { useOnBehalfOfTravels } from "../submitter/useExpenseSubmitter";
 import type { SubmitterDraftLine } from "../submitter/expenseSubmitterTypes";
 import type { ExpenseAppData, ExpenseTransactionPayload } from "../expenseTypes";
 import { historyDate } from "./expenseHistoryFormat";
-import { isOnBehalfOfClaim, makeNameResolver, type HistoryClaim } from "./expenseHistoryTypes";
+import { makeNameResolver, onBehalfOfParty, type HistoryClaim } from "./expenseHistoryTypes";
 import { isRejected } from "./ExpenseHistoryTable";
 
 /**
@@ -62,12 +64,15 @@ import { isRejected } from "./ExpenseHistoryTable";
 export function ExpenseHistoryClaimDetails({
   claim,
   appData,
+  viewerEmail,
   onBack,
   onShowActivity,
 }: {
   claim: HistoryClaim;
   /** Needed only to price edited lines during a resubmit. */
   appData: ExpenseAppData | undefined;
+  /** The signed-in person — who a claim is "for" or "by" is relative to them. */
+  viewerEmail: string | undefined;
   onBack: () => void;
   onShowActivity: () => void;
 }) {
@@ -77,6 +82,17 @@ export function ExpenseHistoryClaimDetails({
   const nameFor = useMemo(() => makeNameResolver(employees.data), [employees.data]);
   const resubmit = useResubmitExpenseClaim();
   const upload = useExpenseReceiptUpload();
+  const qc = useQueryClient();
+
+  // ClaimDetails.tsx:128-146 — correcting a claim filed FOR somebody else has
+  // to offer that person's job numbers, not the reader's. A claim somebody
+  // else filed for the reader is still the reader's own claim, so only the
+  // employee side decides this.
+  const forSomeoneElse = Boolean(viewerEmail) && claim.employeeEmail !== viewerEmail;
+  const onBehalfEmail = forSomeoneElse ? claim.employeeEmail : null;
+  const onBehalfTravels = useOnBehalfOfTravels(onBehalfEmail);
+  const travels = onBehalfEmail ? (onBehalfTravels.data ?? []) : (appData?.travels ?? []);
+  const travelsLoading = Boolean(onBehalfEmail) && onBehalfTravels.isLoading;
 
   const original = useMemo<SubmitterDraftLine[]>(
     () =>
@@ -104,6 +120,9 @@ export function ExpenseHistoryClaimDetails({
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [receiptLoad, setReceiptLoad] = useState<(() => Promise<ReceiptSource>) | null>(null);
 
+  // utils.ts#getOnBehalfOfParty — "Submitted for X" when the reader filed it,
+  // "Submitted by Y" when somebody filed it for them.
+  const party = onBehalfOfParty(claim, viewerEmail);
   const editable = isRejected(claim);
   const dirty = JSON.stringify(lines) !== JSON.stringify(original);
   const cur = claim.currencyCode ?? "LKR";
@@ -140,7 +159,12 @@ export function ExpenseHistoryClaimDetails({
     resubmit.mutate(
       { id: claim.id, transactions },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // The shared mutation invalidates `expense-claims`, which is the
+          // Me-side key; this screen searches under its own one, so without
+          // this the corrected claim would keep reading "Lead Rejected" until
+          // the entry went stale on its own (tableSlice's `needsClaimRefetch`).
+          await qc.invalidateQueries({ queryKey: ["expense-history-claims"] });
           showSuccess("Claim resubmitted for review");
           onBack();
         },
@@ -168,12 +192,12 @@ export function ExpenseHistoryClaimDetails({
             />
           </Tooltip>
         )}
-        {isOnBehalfOfClaim(claim) && (
-          <Tooltip describeChild arrow title={claim.submittedBy ?? ""}>
+        {party && (
+          <Tooltip describeChild arrow title={party.email}>
             <Chip
               size="small"
               variant="outlined"
-              label={`Submitted for ${nameFor(claim.submittedBy)}`}
+              label={`${party.label} ${nameFor(party.email)}`}
               sx={{ fontSize: 11 }}
             />
           </Tooltip>
@@ -195,7 +219,10 @@ export function ExpenseHistoryClaimDetails({
             size="small"
             variant="contained"
             color="warning"
-            disabled={resubmit.isPending}
+            // :262 — the source disables Resubmit while an on-behalf claim's
+            // job numbers are still loading, so a correction cannot be sent
+            // against a list that has not arrived.
+            disabled={resubmit.isPending || travelsLoading}
             onClick={() => setConfirmingResubmit(true)}
             sx={{ textTransform: "none", fontWeight: 600 }}
           >
@@ -388,10 +415,10 @@ export function ExpenseHistoryClaimDetails({
       {editingIndex !== null && appData && (
         <SubmitterLineDialog
           appData={appData}
-          travels={appData.travels}
-          travelsLoading={false}
-          onBehalfOfEmail={null}
-          onBehalfOfName={null}
+          travels={travels}
+          travelsLoading={travelsLoading}
+          onBehalfOfEmail={onBehalfEmail}
+          onBehalfOfName={onBehalfEmail ? nameFor(onBehalfEmail) : null}
           // ExpenseForm.tsx:137-139 — a correction is measured from the date
           // the claim was FILED, so an old claim's lines do not suddenly fail
           // a past-date rule they satisfied when first submitted.

@@ -101,12 +101,19 @@ vi.mock("../useExpenseMutations", () => ({
 
 // Reached only through the resubmit flow, which reuses the submitter's line
 // dialog to edit a corrected line.
+const onBehalfTravelsFor: string[] = [];
 vi.mock("../submitter/useExpenseSubmitter", () => ({
   useSubmitterExpenseTypes: () => ({
     data: [{ id: 297, type: "Sports & Leisure Activities" }],
     isLoading: false,
     isError: false,
   }),
+  // Records who the job numbers were asked for: correcting a claim filed FOR
+  // somebody else has to offer THEIR travels, not the reader's.
+  useOnBehalfOfTravels: (email: string | null) => {
+    if (email) onBehalfTravelsFor.push(email);
+    return { data: [], isLoading: false, isError: false };
+  },
 }));
 vi.mock("../useExpense", () => ({
   useExchangeRates: () => ({
@@ -136,6 +143,7 @@ const { NotificationsProvider } = await import("@context/notifications/Notificat
 
 beforeEach(() => {
   payloads.length = 0;
+  onBehalfTravelsFor.length = 0;
   resubmitMutate.mockClear();
   state.claims = [claim()];
   state.onBehalfOfEmployees = [];
@@ -186,6 +194,24 @@ describe("what reaches the backend", () => {
     fireEvent.mouseDown(screen.getByLabelText("Status"));
     fireEvent.click(await screen.findByRole("option", { name: "Approved" }));
     await waitFor(() => expect(lastPayload().status).toEqual(["APPROVED"]));
+  });
+});
+
+// FilterHolder.tsx:186 — `Object.values(ClaimStatus)` behind a synthetic All.
+describe("the status filter", () => {
+  it("lists every status, in the source's order", async () => {
+    show();
+    await screen.findByText("EXP-me-001");
+    fireEvent.mouseDown(screen.getByLabelText("Status"));
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "All",
+      "Pending Lead",
+      "Lead Rejected",
+      "Pending Finance",
+      "Finance Rejected",
+      "Approved",
+    ]);
   });
 });
 
@@ -420,8 +446,43 @@ describe("the claim activity trail", () => {
     expect(screen.getByText("Receipt unreadable")).toBeInTheDocument();
   });
 
-  it("says who the claim was filed for, by name", async () => {
+  // CustomTimelineItem.tsx:43 — `leadApprovedDate || leadRejectedDate`. A claim
+  // that was rejected, corrected and then passed can carry the rejection date
+  // only, and the stage still has to say when the lead acted.
+  it("dates a passed lead stage from the rejection when there is no approval date", async () => {
+    state.claims = [
+      claim({
+        statusDetails: {
+          ...claim().statusDetails,
+          status: "APPROVED",
+          leadApprovedDate: null,
+          leadRejectedDate: "2026-09-10 05:00:00.0",
+          financeApprovedDate: "2026-09-11 05:00:00.0",
+        },
+      }),
+    ];
+    await openActivity();
+    // Derived from the instant, not hardcoded: the stage renders in the
+    // viewer's zone, so a fixed string would only pass east of the machine.
+    const expected = new Date(Date.UTC(2026, 8, 10, 5, 0, 0)).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    const trail = screen.getByText("Lead Review").closest("div")!.parentElement!;
+    expect(trail.textContent).toContain(expected);
+  });
+
+  // utils.ts#getOnBehalfOfParty — the stage names the OTHER party, and reads
+  // "by" or "for" depending on which side of the claim the reader is on.
+  it("says who filed a claim that was filed for the reader", async () => {
     state.claims = [claim({ submittedBy: "yukthi@wso2.com" })];
+    await openActivity();
+    expect(screen.getByText("Submitted by Yukthi Lochana")).toBeInTheDocument();
+  });
+
+  it("says who a claim the reader filed was for", async () => {
+    state.claims = [claim({ employeeEmail: "yukthi@wso2.com", submittedBy: "me@wso2.com" })];
     await openActivity();
     expect(screen.getByText("Submitted for Yukthi Lochana")).toBeInTheDocument();
   });
@@ -477,6 +538,25 @@ describe("resubmitting a rejected claim", () => {
     await openRejected();
     expect(screen.getByRole("button", { name: "Resubmit" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Edit expense item 1/ })).toBeInTheDocument();
+  });
+
+  // ClaimDetails.tsx:128-146 — a claim filed FOR somebody else is corrected
+  // against THAT person's job numbers, since the travel is theirs.
+  it("asks for the claim owner's job numbers when the claim was filed for someone else", async () => {
+    state.claims = [
+      claim({
+        employeeEmail: "yukthi@wso2.com",
+        submittedBy: "me@wso2.com",
+        statusDetails: { ...claim().statusDetails, status: "LEAD_REJECTED" },
+      }),
+    ];
+    await openRejected();
+    expect(onBehalfTravelsFor).toContain("yukthi@wso2.com");
+  });
+
+  it("uses the reader's own job numbers on their own claim", async () => {
+    await openRejected();
+    expect(onBehalfTravelsFor).toHaveLength(0);
   });
 
   // claimDetailsSlice.ts:52-80 — the claim keeps its id and goes back through
