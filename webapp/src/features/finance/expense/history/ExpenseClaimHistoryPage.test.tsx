@@ -409,6 +409,38 @@ describe("the claim list", () => {
   });
 });
 
+// Only PENDING_LEAD exists in local data, so without this the other four
+// statuses are never exercised anywhere. Each row's chip, the action it offers
+// (`ClaimTable.tsx#getButtonLabel`) and the stage the trail marks
+// (`CustomTimelineItem.tsx:56-99`), for every status the backend can return.
+describe("every status the backend can return", () => {
+  const cases = [
+    { status: "PENDING_LEAD", chip: "Pending Lead", action: "View", stage: "Lead Review", mark: "(Pending)" },
+    { status: "LEAD_REJECTED", chip: "Lead Rejected", action: "View / Resubmit", stage: "Lead Review", mark: "(Rejected)" },
+    { status: "PENDING_FINANCE", chip: "Pending Finance", action: "View", stage: "Finance Review", mark: "(Pending)" },
+    { status: "APPROVED", chip: "Approved", action: "View", stage: "Finance Review", mark: "(Approved)" },
+    { status: "FINANCE_REJECTED", chip: "Finance Rejected", action: "View / Resubmit", stage: "Finance Review", mark: "(Rejected)" },
+  ] as const;
+
+  it.each(cases)("$status shows $chip and offers $action", async ({ status, chip, action }) => {
+    state.claims = [claim({ statusDetails: { ...claim().statusDetails, status } })];
+    show();
+    expect(await screen.findByText(chip)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
+  });
+
+  it.each(cases)("$status marks $stage $mark in the trail", async ({ status, stage, mark }) => {
+    state.claims = [claim({ statusDetails: { ...claim().statusDetails, status } })];
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Claim activity for EXP-me-001" }));
+    await screen.findByText("Claim Activity");
+    // The marked stage carries the parenthetical; the stage itself is always
+    // drawn, so both have to line up on the same one.
+    const marked = screen.getByText(mark).closest("p")!;
+    expect(marked.textContent).toContain(stage);
+  });
+});
+
 describe("the claim activity trail", () => {
   async function openActivity() {
     show();
