@@ -53,12 +53,13 @@ describe("the finance grids do not ring the cell you clicked", () => {
 
   it("is what every card grid actually passes to sx", () => {
     // The constant is worthless if a grid styles itself instead. These are the
-    // four DataGrids in the feature.
+    // DataGrids in the feature.
     const files = [
       "cc/CcTxnTable.tsx",
       "cc/pages/CcHistoryPage.tsx",
       "cc/pages/CcSettingsPage.tsx",
       "cc/pages/CcNewTransactionsPage.tsx",
+      "cc/pages/CcPendingPage.tsx",
     ];
     for (const f of files) {
       const src = readFileSync(join(__dirname, "..", f), "utf8");

@@ -53,6 +53,9 @@ describe("every cc attachment surface decodes base64", () => {
     "cc/CcTxnDetailsDialog.tsx",
     "cc/CcTxnTable.tsx",
     "cc/pages/CcHistoryPage.tsx",
+    // The categorise panel opens attachments on both Pending Submissions and
+    // Pending Approvals, so it is a cc attachment surface like the rest.
+    "cc/CcCategorisePanel.tsx",
   ])("%s", (file) => {
     const imports = importedReaders(file);
     expect(imports).toContain("fetchBase64Attachment");

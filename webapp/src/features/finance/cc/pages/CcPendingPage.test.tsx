@@ -16,58 +16,103 @@
  * under the License.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "token" }));
 vi.mock("@asgardeo/react", () => ({ useAsgardeo: () => ({ isSignedIn: true }) }));
 
-const base = {
-  ccNumber: "4444",
+import type { CcTransaction } from "../ccTypes";
+
+const base: CcTransaction = {
+  id: 1,
+  ccNumber: "1111",
   txnDate: "2026-08-20",
+  txnDescription: "Still with lead",
   txnAmount: 500,
-  expenseTypeId: 1,
-  expenseCategoryLabel: "Travel",
-  expenseTypeLabel: "Hotels",
-  txnComment: "Client trip",
-  receiptFileName: "r.pdf",
+  expenseTypeId: null,
+  expenseCategoryLabel: "Software",
+  expenseTypeLabel: "Subscriptions",
+  txnComment: "Team licence",
+  receiptFileName: null,
   contractFileName: null,
   subRegion: null,
-  travelJobNumber: "JOB-1",
+  travelJobNumber: null,
   productUnit: "Integration",
   businessUnit: "Platform",
   employeeEmail: "me@wso2.com",
-  leadEmail: "lead@wso2.com",
+  leadEmail: "lead@wso2.com,deputy@wso2.com",
   financeApproverEmail: null,
-  empPostedDate: null,
+  empPostedDate: "2026-08-21",
   leadApprovedDate: null,
   financeApprovedDate: null,
   reportSequenceNumber: null,
+  status: "pending_lead",
+};
+
+const withLead: CcTransaction = { ...base, id: 1, status: "pending_lead" };
+const withFinance: CcTransaction = {
+  ...base,
+  id: 2,
+  txnDescription: "Gone to finance",
+  status: "pending_finance",
+  leadApprovedDate: "2026-08-22",
+};
+/** On the other card, so switching cards has something to switch to. */
+const onSecondCard: CcTransaction = {
+  ...base,
+  id: 3,
+  ccNumber: "2222",
+  txnDescription: "Taxi",
+  status: "pending_lead",
 };
 
 vi.mock("../useCc", () => ({
   useCcUserInfo: () => ({ data: { workEmail: "me@wso2.com" }, isLoading: false, isError: false }),
-  useCcTransactions: () => ({
+  useCreditCards: () => ({
     data: [
-      { ...base, id: 1, txnDescription: "Still with lead", status: "pending_lead" },
-      { ...base, id: 2, txnDescription: "Gone to finance", status: "pending_finance" },
+      { id: 1, ccNumber: "1111", label: "Mine", status: "Active", employeeEmail: "me@wso2.com", bankCode: "amex", countPendingLead: 1 },
+      { id: 2, ccNumber: "2222", label: "Spare", status: "Active", employeeEmail: "me@wso2.com", bankCode: "svb", countPendingLead: 1 },
     ],
     isLoading: false,
     isError: false,
   }),
-  useCcMenus: () => ({
-    expenseTypes: { data: { categories: [], types: {} }, isLoading: false },
-    subRegions: { data: { subRegions: [] }, isLoading: false },
-    units: { data: { productUnits: [], businessUnits: [] }, isLoading: false },
-    jobNumbers: { data: { jobNumbers: [] }, isLoading: false },
+  useCcTransactions: () => ({
+    data: [withLead, withFinance, onSecondCard],
+    isLoading: false,
+    isError: false,
+    isSuccess: true,
   }),
-  useCcJobNumberDetails: () => ({ data: undefined, isLoading: false, isError: false }),
+  useCcMenus: () => ({
+    expenseTypes: {
+      data: {
+        categories: ["Software", "Travel", "Marketing"],
+        types: { Software: ["Subscriptions", "Licences"], Travel: ["Flights"], Marketing: ["Events"] },
+      },
+      isError: false,
+    },
+    subRegions: { data: { subRegions: ["EMEA", "APAC"] }, isError: false },
+    units: {
+      data: { productUnits: ["Integration", "Identity"], businessUnits: ["Platform", "Security"] },
+      isError: false,
+    },
+    jobNumbers: { data: { jobNumbers: ["JOB-1"] }, isError: false },
+  }),
+  useCcJobNumberDetails: () => ({ data: undefined, isError: false, isFetching: false }),
 }));
 
-const saveEdit = vi.fn();
+/** Every POST /transactions/save-edit the screen makes. */
+const edited: CcTransaction[][] = [];
 vi.mock("../useCcMutations", () => ({
-  useCcSaveEdit: () => ({ mutate: saveEdit, isPending: false }),
+  useCcSaveEdit: () => ({
+    mutateAsync: async (rows: CcTransaction[]) => {
+      edited.push(rows);
+    },
+    isPending: false,
+  }),
+  useCcCardLabel: () => ({ mutate: vi.fn(), isPending: false }),
   useCcAttachment: () => ({
     upload: { mutateAsync: vi.fn(), isPending: false },
     remove: { mutateAsync: vi.fn(), isPending: false },
@@ -81,7 +126,12 @@ vi.mock("../../components/FinanceShell", () => ({
 const { default: CcPendingPage } = await import("./CcPendingPage");
 const { NotificationsProvider } = await import("@context/notifications/NotificationsContext");
 
-beforeEach(() => saveEdit.mockClear());
+beforeEach(() => {
+  edited.length = 0;
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function show() {
   return render(
@@ -93,20 +143,204 @@ function show() {
   );
 }
 
-// PendingTransactionsDataGrid.tsx:232-237 — a submission can still be corrected
-// while it sits with the lead, saved through /save-edit. Once finance has it,
-// it cannot. The port offered no editing at all on this screen.
-describe("correcting a submission that is still with the lead", () => {
-  it("offers Edit on a lead-stage row", async () => {
+const commentBox = () => screen.getAllByRole("textbox", { name: "Comment" })[0];
+
+describe("the queue", () => {
+  it("shows both stages, each with its own chip", async () => {
     show();
-    await waitFor(() => expect(screen.getByText("Still with lead")).toBeInTheDocument());
-    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+    await screen.findByText("Still with lead");
+    expect(screen.getByText("Pending Lead")).toBeInTheDocument();
+    expect(screen.getByText("Pending Finance")).toBeInTheDocument();
+  });
+
+  it("is scoped to the selected card", async () => {
+    show();
+    await screen.findByText("Still with lead");
+    // The third row is on the other card.
+    expect(screen.queryByText("Taxi")).toBeNull();
+  });
+
+  it("offers no export — this is somebody's spend, not a report", async () => {
+    show();
+    await screen.findByText("Still with lead");
+    expect(screen.queryByRole("button", { name: "Export" })).toBeNull();
+  });
+});
+
+// EditPane.tsx:322-328 — a submitted row opens read-only whatever the caller
+// says, and only the Edit button moves it.
+describe("the panel on a submitted row", () => {
+  it("opens read-only, showing values rather than controls", async () => {
+    show();
+    await screen.findByText("1 - Still with lead");
+    expect(screen.queryByRole("combobox", { name: /Expense Category/ })).toBeNull();
+    // The value is there as text instead.
+    expect(screen.getAllByText("Software").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("offers Edit while the row is still with the lead", async () => {
+    show();
+    await screen.findByText("1 - Still with lead");
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
   it("offers none once finance has it", async () => {
+    const user = userEvent.setup();
     show();
-    await waitFor(() => expect(screen.getByText("Gone to finance")).toBeInTheDocument());
-    // Only the lead-stage row has one, so exactly one button for two rows.
-    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+    await user.click(await screen.findByText("Gone to finance"));
+    await screen.findByText("2 - Gone to finance");
+    // :232-237 — correctable while it is with the lead, and not after.
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+
+  it("reveals the controls on Edit and hides them again on Cancel", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("combobox", { name: /Expense Category/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("combobox", { name: /Expense Category/ })).toBeNull();
+  });
+
+  it("names who has had it, once asked", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    // Collapsed by default (EditPane.tsx:674) — this screen is for correcting a
+    // row, not auditing it.
+    expect(screen.queryByText("Submitted User")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Submission details/ }));
+    for (const label of [
+      "Submitted User",
+      "Lead Approver",
+      "Finance Approver",
+      "Submitted Date",
+      "Lead Approved Date",
+      "Finance Approved Date",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    // One lead, not the whole assigned list — `leadEmail` carries two here.
+    expect(screen.getByText("lead@wso2.com")).toBeInTheDocument();
+    // Finance has not seen it, so its approver and both its dates say so.
+    expect(screen.getAllByText("(not approved yet)")).toHaveLength(3);
+  });
+});
+
+// The correction goes back to an approver, so it is written when the reader
+// says so — never on a timer.
+describe("correcting a row", () => {
+  const startEditing = async (user: ReturnType<typeof userEvent.setup>) => {
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+  };
+
+  it("posts just that row to save-edit and drops back to read-only", async () => {
+    const user = userEvent.setup();
+    show();
+    await startEditing(user);
+    // One keystroke, not a cleared-and-retyped sentence: `userEvent` types a
+    // character at a time and the whole file runs well inside the 5s timeout
+    // only if the typing is kept short.
+    await user.type(commentBox(), "!");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(edited).toHaveLength(1));
+    expect(edited[0]).toHaveLength(1);
+    expect(edited[0][0].id).toBe(1);
+    expect(edited[0][0].txnComment).toBe("Team licence!");
+    // :395-397 — a successful save leaves edit mode.
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
+  });
+
+  it("will not save a row that is no longer complete", async () => {
+    const user = userEvent.setup();
+    show();
+    await startEditing(user);
+    // A submitted row must stay submittable — the source validates on save
+    // (:338-380); this refuses before the round trip.
+    await user.clear(commentBox());
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("autosaves nothing, however long it is left", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTimeAsync });
+    show();
+    await startEditing(user);
+    await user.type(commentBox(), "!");
+
+    // EditPane.tsx:441-445 arms the timer for drafts only.
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(edited).toHaveLength(0);
+  });
+
+  it("puts the row back on Discard", async () => {
+    const user = userEvent.setup();
+    show();
+    await startEditing(user);
+    await user.type(commentBox(), "!");
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(edited).toHaveLength(0);
+    // Back to read-only, with the original value.
+    expect(screen.queryByRole("combobox", { name: /Expense Category/ })).toBeNull();
+    expect(screen.getByText("Team licence")).toBeInTheDocument();
+  });
+});
+
+// The source drops a half-typed correction the moment another row is clicked,
+// and there is no autosave here to catch it.
+describe("moving off a correction", () => {
+  it("asks before switching rows", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.type(commentBox(), "!");
+    await user.click(screen.getByText("Gone to finance"));
+
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByText("1 - Still with lead")).toBeInTheDocument();
+  });
+
+  it("does not ask when nothing has been touched", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByText("Gone to finance"));
+
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(await screen.findByText("2 - Gone to finance")).toBeInTheDocument();
+  });
+
+  it("saves and moves on when asked to", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.type(commentBox(), "!");
+    await user.click(screen.getByText("Gone to finance"));
+    await user.click(await screen.findByRole("button", { name: "Save & Continue" }));
+
+    await waitFor(() => expect(edited).toHaveLength(1));
+    expect(edited[0][0].txnComment).toBe("Team licence!");
+    expect(await screen.findByText("2 - Gone to finance")).toBeInTheDocument();
+  });
+
+  it("asks before switching cards too", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.type(commentBox(), "!");
+    await user.click(screen.getByRole("combobox", { name: "Credit card" }));
+    await user.click(await screen.findByRole("option", { name: /2222/ }));
+
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
   });
 });

@@ -30,6 +30,7 @@ import React, { useRef, useState } from "react";
 import {
   Box,
   Button,
+  Collapse,
   FormControl,
   Stack,
   Table,
@@ -39,13 +40,13 @@ import {
   TableRow,
   Typography,
 } from "@wso2/oxygen-ui";
-import { CheckIcon } from "@wso2/oxygen-ui-icons-react";
+import { CheckIcon, ChevronDownIcon } from "@wso2/oxygen-ui-icons-react";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import { describeError } from "../util/financeError";
-import { money } from "../util/financeFormat";
+import { formatNice, money } from "../util/financeFormat";
 import { CC_SNACK } from "./ccCopy";
 import { CC_ATTACHMENT_ACCEPT, CC_ATTACHMENT_MAX_BYTES, maxSizeLabel } from "../util/financeReceipts";
-import type { CcFundingSource } from "./ccTypes";
+import type { CcFundingSource, CcTransaction } from "./ccTypes";
 
 export function FieldLabel({ children, id }: { children: React.ReactNode; id?: string }) {
   return (
@@ -109,6 +110,121 @@ export function Placeholder() {
 }
 
 /**
+ * A field the reader can only look at — the source's `StyledList` /
+ * `StyledListItemText` pair (`EditPane.tsx:65-91`), a dashed box with the label
+ * above and the value inside.
+ *
+ * Not a disabled input. Everything on a submitted transaction is read-only
+ * until the reader presses Edit, and a screenful of greyed-out dropdowns reads
+ * as "broken" rather than "settled" — the source draws these as text for
+ * exactly that reason.
+ *
+ * `fallback` is per-field on purpose: the source says "(not entered)" for
+ * something nobody filled in, "(not provided)" for something the system should
+ * have supplied, and "(empty)" for a blank comment. They are user-visible and
+ * easy to invent, so each caller passes the source's own wording.
+ */
+export function ReadOnlyField({
+  label,
+  value,
+  fallback,
+}: {
+  label: string;
+  value: string | null | undefined;
+  fallback: string;
+}) {
+  return (
+    <Box
+      sx={{
+        border: "1.5px dashed",
+        borderColor: "divider",
+        borderRadius: 1.5,
+        px: 1.5,
+        py: 1,
+        minWidth: 0,
+      }}
+    >
+      <FieldLabel>{label}</FieldLabel>
+      <Typography
+        sx={{ fontSize: 12.5, fontWeight: value ? 600 : 400, color: value ? "text.primary" : "text.disabled" }}
+        noWrap
+        title={value ?? undefined}
+      >
+        {value || fallback}
+      </Typography>
+    </Box>
+  );
+}
+
+/**
+ * Who has had a submitted transaction and when — the source's "Submission
+ * details" accordion (`EditPane.tsx:853-1101`), which it shows for any row that
+ * has already gone somewhere and hides on one still being drafted.
+ *
+ * Collapsed by default (`:674`), because the reader opens this screen to
+ * correct a row rather than to audit it; the six fields are reference material
+ * for "why is this still sitting there".
+ *
+ * The fallbacks are the source's own and they differ by field on purpose — an
+ * approver who has not acted yet is "(not approved yet)", one who was never
+ * assigned is "(not assigned yet)".
+ */
+export function CcSubmissionDetails({ txn }: { txn: CcTransaction }) {
+  const [open, setOpen] = useState(false);
+  const date = (iso: string | null) => (iso ? formatNice(iso) : null);
+  const cells: { label: string; value: string | null; fallback: string }[] = [
+    { label: "Submitted User", value: txn.employeeEmail, fallback: "(not provided)" },
+    // One lead, not the whole assigned list — `leadEmail` can carry several.
+    { label: "Lead Approver", value: txn.leadEmail?.split(",")[0] ?? null, fallback: "(not assigned yet)" },
+    { label: "Finance Approver", value: txn.financeApproverEmail, fallback: "(not approved yet)" },
+    { label: "Submitted Date", value: date(txn.empPostedDate), fallback: "(not submitted)" },
+    { label: "Lead Approved Date", value: date(txn.leadApprovedDate), fallback: "(not approved yet)" },
+    { label: "Finance Approved Date", value: date(txn.financeApprovedDate), fallback: "(not approved yet)" },
+  ];
+
+  return (
+    <Box>
+      <Button
+        size="small"
+        variant="text"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        endIcon={<ChevronDownIcon size={14} style={{ transform: open ? "rotate(180deg)" : undefined }} />}
+        sx={{ textTransform: "none", fontWeight: 600, fontSize: 12, color: "text.secondary", px: 0.5 }}
+      >
+        Submission details
+      </Button>
+      {/* `unmountOnExit`, so a collapsed trail is genuinely absent rather than
+          present at zero height — otherwise a screen reader reads out six
+          approval fields the sighted reader cannot see. */}
+      <Collapse in={open} unmountOnExit>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 1.25,
+            mt: 1,
+          }}
+        >
+          {cells.map((c) => (
+            <Box key={c.label} sx={{ minWidth: 0 }}>
+              <FieldLabel>{c.label}</FieldLabel>
+              <Typography
+                sx={{ fontSize: 12, color: c.value ? "text.primary" : "text.disabled" }}
+                noWrap
+                title={c.value ?? undefined}
+              >
+                {c.value || c.fallback}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
+/**
  * A row of fields that lays itself out from the room it actually has.
  *
  * Not breakpoints: a breakpoint reads the VIEWPORT, and the categorise panel is
@@ -141,6 +257,7 @@ export function AttachmentField({
   fileName,
   busy,
   disabled,
+  viewOnly,
   onPick,
   onView,
   onRemove,
@@ -149,6 +266,16 @@ export function AttachmentField({
   fileName: string | null;
   busy: boolean;
   disabled?: boolean;
+  /**
+   * Show only what is attached, and only let it be opened.
+   *
+   * `AttachmentButton.tsx:406,467` does the same on a submitted transaction:
+   * viewing an existing file stays available while the row is read-only, but
+   * the upload trigger is dead and the Remove button is not rendered at all.
+   * Different from `disabled`, which greys the buttons out but still shows
+   * them — here they should not be offered in the first place.
+   */
+  viewOnly?: boolean;
   onPick: (file: File) => Promise<void>;
   onView: () => void;
   onRemove: () => Promise<void>;
@@ -198,15 +325,17 @@ export function AttachmentField({
         style={{ display: "none" }}
       />
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexWrap: "wrap" }}>
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => input.current?.click()}
-          disabled={busy || disabled}
-          sx={{ textTransform: "none", fontWeight: 600 }}
-        >
-          {busy ? "Uploading…" : fileName ? "Replace" : "Upload"}
-        </Button>
+        {!viewOnly && (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => input.current?.click()}
+            disabled={busy || disabled}
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
+            {busy ? "Uploading…" : fileName ? "Replace" : "Upload"}
+          </Button>
+        )}
         {fileName && (
           <>
             <Button
@@ -217,16 +346,18 @@ export function AttachmentField({
             >
               View
             </Button>
-            <Button
-              size="small"
-              variant="text"
-              color="error"
-              onClick={remove}
-              disabled={busy || removing || disabled}
-              sx={{ textTransform: "none", fontWeight: 600 }}
-            >
-              {removing ? "Removing…" : "Remove"}
-            </Button>
+            {!viewOnly && (
+              <Button
+                size="small"
+                variant="text"
+                color="error"
+                onClick={remove}
+                disabled={busy || removing || disabled}
+                sx={{ textTransform: "none", fontWeight: 600 }}
+              >
+                {removing ? "Removing…" : "Remove"}
+              </Button>
+            )}
           </>
         )}
         <Typography

@@ -29,6 +29,7 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
 import { useAccessToken } from "@hooks/useAccessToken";
@@ -38,13 +39,23 @@ import { DraftStatusChip } from "../components/DraftStatusChip";
 import { useDraftAutosave } from "../util/useDraftAutosave";
 import { fetchBase64Attachment, type ReceiptSource } from "../util/financeReceipts";
 import { bareAmount, formatNice } from "../util/financeFormat";
-import { AttachmentField, Field, FieldLabel, FieldRow, FundingSources, Placeholder } from "./ccFormFields";
+import {
+  AttachmentField,
+  CcSubmissionDetails,
+  Field,
+  FieldLabel,
+  FieldRow,
+  FundingSources,
+  Placeholder,
+  ReadOnlyField,
+} from "./ccFormFields";
 import { clearDependentFields, resolveProductUnitIndex } from "./ccPendingSubmissions";
 import { useCcJobNumberDetails, useCcMenus } from "./useCc";
 import { useCcAttachment } from "./useCcMutations";
 import {
   CC_MARKETING_CATEGORY,
   CC_TRAVEL_CATEGORY,
+  ccTxnComplete,
   type CcAttachmentType,
   type CcTransaction,
 } from "./ccTypes";
@@ -84,20 +95,44 @@ export interface CcCategorisePanelHandle {
  */
 export function CcCategorisePanel({
   txn,
+  mode = "draft",
   editMode,
+  enableEdit = false,
   ref,
   onDraftChange,
   onSave,
 }: {
   /** Seeded once per row — the page keys this component by transaction id. */
   txn: CcTransaction;
+  /**
+   * Which screen this is serving — the source's `updateType` by another name,
+   * and it drives the same three things (`EditPane.tsx:322-328`, `:441-445`,
+   * `:1547-1604`).
+   *
+   * `draft` — Pending Submissions. Editable from the start, autosaved every
+   * five seconds, written to `/save-draft`, incomplete rows welcome.
+   *
+   * `review` — Pending Approvals. The row is already submitted, so it opens
+   * read-only and stays that way until the reader presses Edit; nothing is
+   * autosaved, and a save has to leave the row complete because it is going
+   * straight back to an approver.
+   */
+  mode?: "draft" | "review";
+  /** `draft` only — the list drives this from its bulk selection. */
   editMode: boolean;
+  /**
+   * `review` only — whether Edit is offered at all. The source ties it to the
+   * stage: a row still with the lead can be corrected, one finance already has
+   * cannot (`PendingTransactionsDataGrid.tsx:232-237`).
+   */
+  enableEdit?: boolean;
   ref?: React.Ref<CcCategorisePanelHandle>;
   /** Fires on each field edit so the list's completeness tick keeps up. */
   onDraftChange: (next: CcTransaction) => void;
-  /** Persists one row through /transactions/save-draft. */
+  /** Persists one row — `/save-draft` in draft mode, `/save-edit` in review. */
   onSave: (row: CcTransaction) => Promise<void>;
 }) {
+  const review = mode === "review";
   const menus = useCcMenus();
   const attachment = useCcAttachment();
   const getAccessToken = useAccessToken();
@@ -111,6 +146,14 @@ export function CcCategorisePanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [load, setLoad] = useState<(() => Promise<ReceiptSource>) | null>(null);
   const [fundingOpen, setFundingOpen] = useState(false);
+  // `review` opens read-only whatever the caller says, and only the Edit button
+  // moves it — `EditPane.tsx:322-328` ignores the `editMode` prop entirely once
+  // the row has been submitted.
+  const [isEditing, setIsEditing] = useState(false);
+  /** Whether the fields accept input right now. */
+  const editable = review ? isEditing : editMode;
+  /** Show the fields as values rather than as controls. */
+  const showValues = review && !isEditing;
 
   const categories = menus.expenseTypes.data?.categories ?? [];
   const subRegions = menus.subRegions.data?.subRegions ?? [];
@@ -166,6 +209,7 @@ export function CcCategorisePanel({
   // The autosave thunk, held through a ref the render keeps current — see the
   // hook call below for why it is indirected rather than passed inline.
   const autosave = useRef<() => Promise<void>>(async () => {});
+
   // The signature as of the latest render, for `persist` to compare against
   // when it finishes — its own `row` argument is whatever was current when the
   // write STARTED, which may be several edits ago by the time it lands.
@@ -211,6 +255,13 @@ export function CcCategorisePanel({
     }
   };
 
+  /** Save, and in review mode drop back to read-only once it lands (`:395-397`). */
+  const saveRow = async (): Promise<boolean> => {
+    const ok = await persist(effective);
+    if (ok && review) setIsEditing(false);
+    return ok;
+  };
+
   // EditPane.tsx:442-473 — five seconds after the last change, the source's own
   // autoSaveDelay (:150). Kept as the safety net behind the explicit Save:
   // categorising a batch and closing the tab must not throw the work away.
@@ -234,16 +285,20 @@ export function CcCategorisePanel({
       throw new Error("Could not save the draft");
     }
   };
+  // `ready` is false for the whole of review mode, which is what keeps the hook
+  // from ever arming — the source guards the same way (`:441-445`), because a
+  // correction to a submitted row goes back to an approver and must not leave
+  // on a timer the reader did not ask for.
   const draftState = useDraftAutosave(
     signature(effective),
-    editMode,
+    !review && editMode,
     () => autosave.current(),
     5000,
   );
 
   useImperativeHandle(ref, () => ({
     hasUnsavedChanges: () => dirty,
-    saveNow: () => persist(effective),
+    saveNow: () => saveRow(),
     discard: () => {
       // Same reason as in `persist`: the reader has said to throw this away and
       // this panel unmounts in the same commit, so the queued autosave has to
@@ -251,6 +306,7 @@ export function CcCategorisePanel({
       autosave.current = async () => {};
       setDraft(baseline);
       onDraftChange(baseline);
+      setIsEditing(false);
     },
   }));
 
@@ -305,13 +361,16 @@ export function CcCategorisePanel({
             ${bareAmount(draft.txnAmount)}
           </Typography>
         </Stack>
-        {/* :909-920 — for a `new` transaction the source shows these two and
-            nothing else; the submission details below them are for rows that
-            have already gone somewhere. */}
-        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>
-          Date: {formatNice(draft.txnDate)}
-          {draft.leadEmail && ` | Lead Approver: ${draft.leadEmail.split(",")[0]}`}
-        </Typography>
+        {/* :909-936 — the lead rides inline only while the row is still a draft;
+            once it has been submitted that same slot becomes the submission
+            trail, because by then there is more to say than one name. */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+          <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>
+            Date: {formatNice(draft.txnDate)}
+            {!review && draft.leadEmail && ` | Lead Approver: ${draft.leadEmail.split(",")[0]}`}
+          </Typography>
+        </Stack>
+        {review && <CcSubmissionDetails txn={txn} />}
       </Box>
 
       {/* No banner when a bulk selection makes this read-only. The source shows
@@ -330,11 +389,61 @@ export function CcCategorisePanel({
           `flex: 1` gives the column the panel's full remaining height, which is
           what lets the action row at the end of it sit against the bottom. */}
       <Stack spacing={1.5} sx={{ mt: 1.5, flex: 1 }}>
+        {showValues ? (
+          // A submitted row, not being corrected. The source draws these as
+          // text in dashed boxes rather than as disabled controls
+          // (`EditPane.tsx:1126-1425`) — a screenful of greyed-out dropdowns
+          // reads as "broken" where this reads as "settled".
+          <>
+            <FieldRow>
+              <ReadOnlyField label="Expense Category" value={draft.expenseCategoryLabel} fallback="(not entered)" />
+              <ReadOnlyField label="Expense Type" value={draft.expenseTypeLabel} fallback="(not entered)" />
+            </FieldRow>
+            <ReadOnlyField label="Comment" value={draft.txnComment} fallback="(empty)" />
+            <FieldRow>
+              {isTravel ? (
+                <ReadOnlyField label="Job Number" value={draft.travelJobNumber} fallback="(not entered)" />
+              ) : (
+                <>
+                  <ReadOnlyField label="Product Unit" value={draft.productUnit} fallback="(not provided)" />
+                  <ReadOnlyField label="Business Unit" value={draft.businessUnit} fallback="(not provided)" />
+                </>
+              )}
+              {isMarketing && (
+                <ReadOnlyField label="Sub Region" value={draft.subRegion} fallback="(not entered)" />
+              )}
+            </FieldRow>
+            <FieldRow>
+              {/* `viewOnly`, not `disabled` — AttachmentButton.tsx:406,467 keeps
+                  an attached file openable on a submitted row but offers no way
+                  to replace or remove it until the row is being corrected. */}
+              <AttachmentField
+                label="Receipt"
+                fileName={draft.receiptFileName}
+                busy={false}
+                viewOnly
+                onView={() => viewAttachment("receipt")}
+                onPick={async () => {}}
+                onRemove={async () => {}}
+              />
+              <AttachmentField
+                label="Contract"
+                fileName={draft.contractFileName}
+                busy={false}
+                viewOnly
+                onView={() => viewAttachment("contract")}
+                onPick={async () => {}}
+                onRemove={async () => {}}
+              />
+            </FieldRow>
+          </>
+        ) : (
+          <>
         <FieldRow>
           <Field label="Expense Category" required>
             <Select
               value={category}
-              disabled={!editMode}
+              disabled={!editable}
               onChange={(e) =>
                 change(
                   { expenseCategoryLabel: String(e.target.value) || null },
@@ -354,7 +463,7 @@ export function CcCategorisePanel({
           <Field label="Expense Type" required>
             <Select
               value={draft.expenseTypeLabel ?? ""}
-              disabled={!editMode || !category}
+              disabled={!editable || !category}
               onChange={(e) =>
                 change(
                   { expenseTypeLabel: String(e.target.value) || null },
@@ -390,7 +499,7 @@ export function CcCategorisePanel({
           <TextField
             size="small"
             fullWidth
-            disabled={!editMode}
+            disabled={!editable}
             value={draft.txnComment ?? ""}
             onChange={(e) => change({ txnComment: e.target.value.slice(0, COMMENT_MAX) || null })}
             placeholder="Short note for this transaction"
@@ -403,7 +512,7 @@ export function CcCategorisePanel({
           <Field label="Travel Job Number" required>
             <Select
               value={draft.travelJobNumber ?? ""}
-              disabled={!editMode}
+              disabled={!editable}
               onChange={(e) =>
                 change(
                   { travelJobNumber: String(e.target.value) || null },
@@ -474,7 +583,7 @@ export function CcCategorisePanel({
             <Field label="Product Unit" required>
               <Select<number | "">
                 value={unitIndex ?? ""}
-                disabled={!editMode}
+                disabled={!editable}
                 onChange={(e) => {
                   const i = e.target.value === "" ? null : Number(e.target.value);
                   change({
@@ -508,7 +617,7 @@ export function CcCategorisePanel({
               <Field label="Sub Region" required>
                 <Select
                   value={draft.subRegion ?? ""}
-                  disabled={!editMode}
+                  disabled={!editable}
                   onChange={(e) => change({ subRegion: String(e.target.value) || null })}
                   displayEmpty
                   renderValue={(v) => (v ? String(v) : <Placeholder />)}
@@ -529,7 +638,7 @@ export function CcCategorisePanel({
             label="Receipt"
             fileName={draft.receiptFileName}
             busy={attachment.upload.isPending}
-            disabled={!editMode}
+            disabled={!editable}
             onView={() => viewAttachment("receipt")}
             onPick={async (file) => {
               const name = await attachment.upload.mutateAsync({ id: txn.id, attachmentType: "receipt", file });
@@ -544,7 +653,7 @@ export function CcCategorisePanel({
             label="Contract"
             fileName={draft.contractFileName}
             busy={attachment.upload.isPending}
-            disabled={!editMode}
+            disabled={!editable}
             onView={() => viewAttachment("contract")}
             onPick={async (file) => {
               const name = await attachment.upload.mutateAsync({ id: txn.id, attachmentType: "contract", file });
@@ -556,6 +665,8 @@ export function CcCategorisePanel({
             }}
           />
         </FieldRow>
+          </>
+        )}
 
         {saveError && (
           <Alert severity="error" sx={{ fontSize: 12.5 }}>
@@ -576,22 +687,69 @@ export function CcCategorisePanel({
           {/* Wrapped, because the chip renders nothing while idle and a bare
               null would let `space-between` slide Save over to the left. */}
           <Box>
-            <DraftStatusChip state={draftState} />
+            {/* Never in review mode: nothing is autosaved there, so a chip
+                reporting on it would be reporting on nothing. */}
+            {!review && <DraftStatusChip state={draftState} />}
           </Box>
-          {editMode && (
-            <Button
-              size="small"
-              variant="contained"
-              // :1595-1599 — nothing to save, or a save already in flight.
-              // A job with no funding sources is refused by `persist`, so say so
-              // here rather than letting the press fail silently.
-              disabled={!dirty || saving || jobDetails.isFetching || (isTravel && jobUnusable)}
-              onClick={() => void persist(effective)}
-              sx={{ fontWeight: 600, minWidth: 90 }}
-            >
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          )}
+          <Stack direction="row" spacing={1} alignItems="center">
+            {/* :1547-1585 — Edit only while clean, because once there are edits
+                the way out is Discard or Save, not a toggle that would leave it
+                ambiguous which of the two the reader meant. */}
+            {review && enableEdit && !dirty && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setIsEditing((v) => !v)}
+                sx={{ fontWeight: 600, minWidth: 90 }}
+              >
+                {isEditing ? "Cancel" : "Edit"}
+              </Button>
+            )}
+            {review && isEditing && dirty && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                disabled={saving || jobDetails.isFetching}
+                onClick={() => {
+                  setDraft(baseline);
+                  onDraftChange(baseline);
+                  setIsEditing(false);
+                }}
+                sx={{ fontWeight: 600, minWidth: 90 }}
+              >
+                Discard
+              </Button>
+            )}
+            {editable && (
+              // :1595-1599 — nothing to save, or a save already in flight. A job
+              // with no funding sources is refused by `persist`, so say so here
+              // rather than letting the press fail silently. In review the row
+              // is going back to an approver, so it also has to be complete —
+              // the source validates on save (:338-380); disabling says the same
+              // thing without the round trip, which is what `CcEditDialog`
+              // already does.
+              <Tooltip title={review && dirty && !ccTxnComplete(effective) ? "Please fill in all required fields." : ""}>
+                <span>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={
+                      !dirty ||
+                      saving ||
+                      jobDetails.isFetching ||
+                      (isTravel && jobUnusable) ||
+                      (review && !ccTxnComplete(effective))
+                    }
+                    onClick={() => void saveRow()}
+                    sx={{ fontWeight: 600, minWidth: 90 }}
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+          </Stack>
         </Stack>
       </Stack>
 

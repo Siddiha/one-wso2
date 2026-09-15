@@ -63,10 +63,19 @@ drops the cents, as the source's `formatCurrency(x).split(".")[0]` does througho
   the backend already scopes them — so the request omits `ownedCardsOnly` rather than
   sending it as false.
 
-### 2.2 New transactions — `/finance/cc/new`
+### 2.2 Pending Submissions — `/finance/cc/new`
 
-Uncategorised transactions from the last **seven days**. Each needs an expense type, a
-comment, and — depending on the category — more:
+> **The name.** This screen answers to four: the route says `new`, the nav id is `cc-new`
+> and `ccPaths.newTransactions` agrees, while the nav label, the page title and the source
+> app all say **Pending Submissions** (`route.ts` maps `/new-transactions` to that label).
+> Confusingly the source ALSO has a screen it labels "Pending Approvals" at
+> `/pending-submissions`, which is §2.3 below. The source's labels win: this is Pending
+> Submissions, §2.3 is Pending Approvals. The route keeps `new` because it is the URL people
+> already have.
+
+Uncategorised transactions from the last **seven days**, on whichever of the viewer's own
+cards is selected. Each needs an expense type, a comment, and — depending on the category
+— more:
 
 | Category | Also required |
 |---|---|
@@ -74,19 +83,81 @@ comment, and — depending on the category — more:
 | Marketing (and any `Marketing - …` sub-category) | sub-region **and** product unit |
 | anything else | product unit |
 
+**Layout: the list on the left, the categorisation panel on the right.** The panel is live
+against whichever row is highlighted, so the list stays readable while a row is filled in.
+Rows that are ready carry a green tick, and the list is sorted with those first.
+
+**Nothing on this screen scrolls** — not the page, not the list, not the panel. Both halves
+are measured to the room left below them, so the grid's pagination sits on the bottom edge
+and the panel's Save sits on its own. The form is kept short enough to fit instead: fields
+are paired across two columns, there is no divider between them, the subtitle is one line,
+and the funding-source table is behind a button rather than inline.
+
+**The card picker is a dropdown** showing the selected card's name and full number, with a
+rename button beside it. A card with no label of its own is called `Card 1`, `Card 2` by its
+position in the list. Each option carries its bank's mark and how many transactions are
+outstanding on it.
+
+**Changing a field clears what it invalidates.** A new category drops the type, job number,
+sub-region and units beneath it; a new type drops the job number and sub-region; a new job
+number drops the sub-region. Without this a recategorised row carries values that no longer
+belong to it.
+
 **Travel job numbers carry their own units.** Picking one calls `GET /travels/{jobNumber}`
 and fills the product and business unit from the job rather than asking; that is why they
 are required. A job with **no funding sources** is refused rather than half-applied, and a
-job missing units says so. The engagement and its funding split are shown against the
-transaction amount.
+job missing units says so — a warning, not a block, because Travel is not asked for units.
+The engagement is shown against the transaction, and its funding split — what the
+transaction costs each share of the job — opens in a dialog, as in the source.
 
-A row can be saved as a draft or submitted. Receipts and contracts attach per transaction.
+**Product units are chosen by index, not by name.** Product and business units arrive as
+two index-aligned arrays and the same product-unit name can appear under more than one
+business unit, so a row is matched back to its entry by the exact pair first and by product
+unit alone only as a fallback.
 
-### 2.3 Pending submissions — `/finance/cc/pending`
+**Saving.** Save writes that one row through `/save-draft`; an autosave five seconds after
+the last change is the safety net behind it, so closing the tab mid-batch loses nothing.
+Moving to another row, ticking a checkbox, or switching card with unsaved edits asks first —
+save, discard, or stay. A travel job with **no funding sources is never written at all**, by
+Save or by the autosave, since finance could not book the spend against it. A write the
+backend refuses says so and is retried on the next change, rather than being reported as
+saved.
 
-The card holder's own submitted transactions, still with a lead or with finance. **While
-it is still with the lead**, the card holder can correct a submission in place, saved
-through `/save-edit`. Once finance has it, it is locked.
+**Ticking any row puts the panel into read-only.** Bulk selection and single-row editing are
+separate modes; **Bulk Edit** then applies whichever fields you fill to every ticked row and
+leaves the rest of each row alone. It has no confirmation step and does not clear the
+selection, because the usual next action is to submit those same rows.
+
+**Submit takes a whole selection or none of it.** If any ticked row is incomplete the button
+stays disabled rather than quietly submitting the ready half.
+
+Receipts and contracts attach per transaction, and can be viewed and removed from the panel.
+
+### 2.3 Pending Approvals — `/finance/cc/pending`
+
+The card holder's own submitted transactions on the selected card, still with a lead or
+with finance. Same shape as §2.2 — the list on the left, the panel on the right, neither
+of them scrolling the page — and the same columns, except that **Status** replaces the
+completeness tick, because this queue mixes both stages. No checkboxes: nothing here acts
+on a set of rows.
+
+**The panel opens read-only**, drawn as values rather than as disabled controls, and stays
+that way until the reader presses **Edit**. Edit is offered **only while the row is still
+with the lead**; once finance has it there is no Edit button at all. Edit/Cancel appears
+only while the row is clean — once there are changes the way out is **Discard** or **Save**,
+so it is never ambiguous which the reader meant.
+
+**Saving goes through `/save-edit`** and drops the row back to read-only. **Nothing is
+autosaved here**: the correction is going straight back to an approver, so it is written
+when the reader says so. For the same reason Save refuses a row that is no longer
+complete — the source validates on save; this refuses before the round trip, as the
+categorise dialog already does.
+
+**Submission details** — who has had the row and when — sit behind an expander in the
+header, collapsed by default: this screen is for correcting a row, not auditing it.
+
+Attachments can be **viewed** on a submitted row but only replaced or removed while it is
+being corrected.
 
 ### 2.4 Approve submissions — `/finance/cc/approve`
 
@@ -139,6 +210,33 @@ and the "As of" date.
 **Attachments.** The port accepts the same types the source does, bmp, gif and svg
 included.
 
+**Pending Submissions sorts on the server's copy of a row, not the edited one.** The
+source's list re-sorts from its Redux store, which does not carry the edit panel's unsaved
+changes, so the order holds still while a row is filled in. Sorting our live rows instead
+would move a row to the top the instant its last required field was filled — and the panel,
+which follows the first row until one is picked, would jump to whatever landed underneath.
+The green tick still updates live; only the order waits.
+
+**A bulk edit checks each row's own category before setting its units.** The source
+checks the form's (`EditPaneModal.tsx:133-140`), which leaves a hole: pick a product unit
+without picking a category and a Travel row in the selection is stamped with a unit its job
+number is supposed to own. Whenever the form does name a category the two agree, so this is
+narrower than it sounds. The unit field is also hidden when every selected row is Travel and
+no category is being set, rather than offering a control that would apply to none of them.
+
+**Pending Approvals guards an unsaved correction; the source does not.** Its grid has no
+`editPaneRef` and no dialog, so clicking another row drops a half-typed correction on the
+floor — and unlike the drafting screen there is no autosave behind it to catch the loss.
+Ours asks: save, discard, or stay. The same screen also gained the **card picker** the
+source has and the port was missing; it used to list every card's pending rows at once.
+
+**Switching cards asks before discarding unsaved edits**, as switching rows already does.
+The source lets a card change through unguarded; here the autosave would otherwise flush the
+half-typed edit on the way out and the reader would never be offered the choice. The
+selection is dropped with the card it belonged to — it holds transaction ids, and the list
+is filtered by card, so carrying it over left Bulk Edit enabled and badged with rows it no
+longer had.
+
 **One guard the source does not have.** Approving is held while an edit saved from the
 approve screen is still in flight. The source's `isApproveDisabled`
 (`ApproveTransactionsDataGrid.tsx:189-191`) checks only the selection and the approval
@@ -163,8 +261,9 @@ worth raising with the source's owners rather than diverging here.
 
 ## 6. Test checklist
 
-Covered in `cc/ccDashboard.test.ts`, `cc/ccWireFormat.test.tsx`, `cc/CcEditDialog.test.tsx`,
-`cc/components/CardMenu.test.tsx` and `cc/pages/{CcApprovePage,CcDashboardPage,CcHistoryPage,CcPendingPage}.test.tsx`.
+Covered in `cc/ccDashboard.test.ts`, `cc/ccPendingSubmissions.test.ts`,
+`cc/ccWireFormat.test.tsx`, `cc/CcEditDialog.test.tsx`, `cc/components/CardMenu.test.tsx`
+and `cc/pages/{CcApprovePage,CcDashboardPage,CcHistoryPage,CcNewTransactionsPage,CcPendingPage}.test.tsx`.
 Every fix carries a test that fails against the previous behaviour, verified by reverting it.
 
 Active-card filter, including case-insensitive status · the window ends tomorrow, not
@@ -179,8 +278,34 @@ issues the compliance request · the age table's three columns and the cardholde
 eight · amounts rendered without cents · the "days" unit · falsy query parameters omitted
 rather than sent as "false" · one lead named on the approval trail, not the whole assigned
 list, and the source's "(not provided)" / "(not approved)" wording · reaching rename by
-keyboard does not also switch card · approving waits for an in-flight edit · a job missing
-units warns but still saves.
+approving waits for an in-flight edit · a job missing units warns but still saves.
+
+Pending Approvals adds: both stages listed with their own chip · the queue scoped to the
+selected card · the panel opening read-only as values rather than controls · Edit offered on
+a lead-stage row and withheld once finance has it · Edit revealing the controls and Cancel
+hiding them again · Save posting one row to `/save-edit` and dropping back to read-only ·
+Save refused on a row that is no longer complete · **nothing autosaved however long it is
+left** · Discard putting the row back · the submission trail collapsed by default and naming
+one lead rather than the whole assigned list · and the guard on both a row change and a card
+change.
+
+The card picker: the selected card's name and number · selecting a card · an unlabelled card
+numbered by position · the outstanding count shown when there is one and not when there is
+none · renaming the selected card, seeded with its current label · reaching rename by
+keyboard does not also switch card.
+
+Pending Submissions adds: complete rows sorted first, and the caller's array left alone ·
+the product-unit index resolved by exact pair, by product alone, and not at all · each
+field clearing what it invalidates, including a marketing sub-region not surviving a switch
+to Travel · a bulk edit touching only the fields filled in, applied to every selected row,
+in an order that lets a category and its type be set together · a bulk edit refusing to
+stamp a hand-picked unit on rows it is switching to Travel · Save posting one row · the
+five-second autosave, not the util's default second · a tick making the panel read-only and
+taking Save away · Submit refusing a mixed selection · and all four ways out of the
+unsaved-changes dialog · a travel job with no funding sources refused by both Save and the
+autosave · a refused write reported as not saved rather than saved · switching cards showing
+that card's transactions, asking first when there are unsaved edits, and dropping the
+selection that belonged to the card being left.
 
 Date expectations are built with local date fields, matching the helpers under test — a
 UTC ISO string plus a fixed 86,400,000 ms offset names a different calendar day in the
