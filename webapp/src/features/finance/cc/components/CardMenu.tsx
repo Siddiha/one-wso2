@@ -1,18 +1,20 @@
-// Copyright (c) 2026 WSO2 LLC. (https://www.wso2.com).
-//
-// WSO2 LLC. licenses this file to you under the Apache License,
-// Version 2.0 (the "License"); you may not use this file except
-// in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+/**
+ * Copyright (c) 2026, WSO2 LLC. (https://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 
 import { useState } from "react";
 import {
@@ -23,16 +25,33 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   IconButton,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Typography,
 } from "@wso2/oxygen-ui";
-import { PencilIcon } from "@wso2/oxygen-ui-icons-react";
-import type { CcCreditCard } from "../ccTypes";
+import { CreditCardIcon, PencilIcon } from "@wso2/oxygen-ui-icons-react";
+import { CcBankIcon } from "./CcBankIcon";
+import { ccCardName, type CcCreditCard } from "../ccTypes";
 
-// Horizontal credit-card picker. Each card shows its (masked) number, label
-// and an optional pending/new count badge.
+/**
+ * The credit-card picker — a dropdown with a rename button beside it, as the
+ * source has it (`CardMenu.tsx`).
+ *
+ * This was a row of tiles before. The dropdown is what the source uses and what
+ * the screens were designed around: the tiles took the full width of the header
+ * for something that is picked once and then left alone, and with more than
+ * three cards they scrolled sideways.
+ *
+ * The change also removes a hazard the tiles had. The rename button sat INSIDE
+ * each tile, which was itself a `role="button"` selecting on Enter/Space, so
+ * reaching rename by keyboard both opened the dialog and switched card
+ * underneath it — held off only by stopping propagation in two handlers. Here
+ * the rename button is a sibling of the select and cannot select anything.
+ */
 export function CardMenu({
   cards,
   active,
@@ -45,103 +64,134 @@ export function CardMenu({
   onSelect: (ccNumber: string) => void;
   badge?: "countNew" | "countPendingLead" | "countPendingFinance";
   /**
-   * Lets a card be renamed in place — CardMenu.tsx:67-75 in the source, where
-   * the label is the only thing distinguishing two cards with similar numbers.
+   * Lets the selected card be renamed. The label is the only thing telling two
+   * cards with similar numbers apart, so the source keeps this next to the
+   * picker rather than in a settings screen.
    */
   onRename?: (card: CcCreditCard, label: string) => void;
 }) {
-  const [renaming, setRenaming] = useState<CcCreditCard | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
+
+  const activeIndex = cards.findIndex((c) => c.ccNumber === active);
+  const activeCard = activeIndex >= 0 ? cards[activeIndex] : null;
 
   return (
     <>
-    <Stack direction="row" spacing={1.25} sx={{ overflowX: "auto", pb: 0.5 }}>
-      {cards.map((c) => {
-        const selected = c.ccNumber === active;
-        const count = badge ? c[badge] : 0;
-        return (
-          <Box
-            key={c.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onSelect(c.ccNumber)}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onSelect(c.ccNumber)}
-            sx={{
-              cursor: "pointer",
-              minWidth: 160,
-              border: 1,
-              borderColor: selected ? "primary.main" : "divider",
-              bgcolor: selected ? "primary.light" : "background.paper",
-              borderRadius: 1.5,
-              px: 1.5,
-              py: 1.25,
-              flexShrink: 0,
-              transition: "border-color .12s, background-color .12s",
+      <Stack direction="row" alignItems="center" spacing={0.5}>
+        <FormControl size="small" sx={{ width: 270 }}>
+          <Select
+            value={activeCard ? activeCard.ccNumber : ""}
+            onChange={(e) => onSelect(String(e.target.value))}
+            displayEmpty
+            variant="standard"
+            inputProps={{ "aria-label": "Credit card" }}
+            renderValue={() =>
+              activeCard ? (
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CreditCardIcon size={16} style={{ flexShrink: 0, opacity: 0.7 }} />
+                  <Typography component="span" sx={{ fontSize: 13.5, fontWeight: 700 }}>
+                    {ccCardName(activeCard.label, activeIndex)}
+                  </Typography>
+                  <Typography component="span" sx={{ fontSize: 13.5, color: "text.secondary" }}>
+                    ({activeCard.ccNumber})
+                  </Typography>
+                </Stack>
+              ) : (
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CreditCardIcon size={16} style={{ flexShrink: 0, opacity: 0.7 }} />
+                  <Typography component="span" sx={{ fontSize: 13.5, color: "text.secondary" }}>
+                    Select Credit Card
+                  </Typography>
+                </Stack>
+              )
+            }
+          >
+            {cards.map((card, index) => {
+              const count = badge ? card[badge] : 0;
+              return (
+                <MenuItem key={card.id} value={card.ccNumber}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      width: "100%",
+                      gap: 2,
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <CcBankIcon bankCode={card.bankCode} />
+                      <Typography component="span" sx={{ fontSize: 13.5, fontWeight: 700 }}>
+                        {ccCardName(card.label, index)}
+                      </Typography>
+                      {count > 0 && (
+                        <Badge
+                          badgeContent={count}
+                          color="primary"
+                          sx={{ ml: 1, "& .MuiBadge-badge": { fontSize: 10, height: 17, minWidth: 17 } }}
+                        />
+                      )}
+                      {card.status !== "Active" && (
+                        <Typography component="span" sx={{ fontSize: 11, color: "text.disabled" }}>
+                          Inactive
+                        </Typography>
+                      )}
+                    </Stack>
+                    <Typography component="span" sx={{ fontSize: 12, color: "text.secondary" }}>
+                      {card.ccNumber}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              );
+            })}
+          </Select>
+        </FormControl>
+
+        {onRename && activeCard && (
+          <IconButton
+            size="small"
+            aria-label="Rename card"
+            onClick={() => {
+              setDraftLabel(activeCard.label ?? "");
+              setRenaming(true);
+            }}
+            sx={{ color: "text.secondary" }}
+          >
+            <PencilIcon size={15} />
+          </IconButton>
+        )}
+      </Stack>
+
+      <Dialog open={renaming} onClose={() => setRenaming(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontSize: 17, fontWeight: 700 }}>Rename card</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            size="small"
+            fullWidth
+            autoFocus
+            value={draftLabel}
+            onChange={(e) => setDraftLabel(e.target.value)}
+            placeholder="e.g. Travel card"
+            inputProps={{ "aria-label": "Card label" }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button size="small" onClick={() => setRenaming(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => {
+              if (activeCard) onRename?.(activeCard, draftLabel.trim());
+              setRenaming(false);
             }}
           >
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography sx={{ fontSize: 12.5, fontWeight: 700, fontFamily: "monospace", flex: 1 }} noWrap>
-                •••• {c.ccNumber.slice(-4)}
-              </Typography>
-                {onRename && (
-                  <IconButton
-                    size="small"
-                    aria-label={`Rename card ending ${c.ccNumber.slice(-4)}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setRenaming(c);
-                      setDraftLabel(c.label ?? "");
-                    }}
-                    // The tile around it is a role="button" that selects the
-                    // card on Enter/Space, and a keydown here bubbles to it.
-                    onKeyDown={(e) => e.stopPropagation()}
-                    sx={{ p: 0.25, color: "text.secondary" }}
-                  >
-                    <PencilIcon size={13} />
-                  </IconButton>
-                )}
-              {badge && count > 0 && (
-                <Badge badgeContent={count} color="primary" sx={{ "& .MuiBadge-badge": { fontSize: 10, height: 16, minWidth: 16 } }} />
-              )}
-            </Stack>
-            <Typography sx={{ fontSize: 11, color: "text.secondary" }} noWrap>
-              {c.label || c.bankCode.toUpperCase()}
-              {c.status !== "Active" ? " · Inactive" : ""}
-            </Typography>
-          </Box>
-        );
-      })}
-    </Stack>
-
-    <Dialog open={renaming !== null} onClose={() => setRenaming(null)} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 17, fontWeight: 700 }}>Rename card</DialogTitle>
-      <DialogContent dividers>
-        <TextField
-          size="small"
-          fullWidth
-          autoFocus
-          value={draftLabel}
-          onChange={(e) => setDraftLabel(e.target.value)}
-          placeholder="e.g. Travel card"
-          inputProps={{ "aria-label": "Card label" }}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button size="small" onClick={() => setRenaming(null)}>
-          Cancel
-        </Button>
-        <Button
-          size="small"
-          variant="contained"
-          onClick={() => {
-            if (renaming) onRename?.(renaming, draftLabel.trim());
-            setRenaming(null);
-          }}
-        >
-          Save
-        </Button>
-      </DialogActions>
-    </Dialog>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

@@ -29,6 +29,7 @@ export default function FinanceShell({
   subtitle,
   configured,
   configKey,
+  fill = false,
   children,
 }: {
   // Which finance app this screen belongs to (OPD / Credit Card / Expense).
@@ -38,10 +39,27 @@ export default function FinanceShell({
   subtitle?: string;
   configured: boolean;
   configKey: string; // e.g. "ONE_WSO2_OPD_BACKEND_URL"
+  /**
+   * Give the screen exactly the height left in the page and no more, instead
+   * of letting it grow the page.
+   *
+   * For screens that place something of their own against the bottom edge — a
+   * grid whose pagination should sit there, a panel that should scroll inside
+   * its own card rather than lengthening the page. `AppLayout` already makes
+   * the region around `<Outlet />` a flex column that scrolls
+   * (`AppLayout.tsx:119-132`), so a screen only has to claim its share of it;
+   * this is a pure CSS chain, with nothing measured and nothing to re-measure
+   * when the window changes.
+   *
+   * Off by default: every other finance screen grows down the page, which is
+   * right for a form or a report.
+   */
+  fill?: boolean;
   children: ReactNode;
 }) {
+  const fillColumn = { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } as const;
   return (
-    <Box>
+    <Box sx={fill ? fillColumn : undefined}>
       <Chip
         icon={<eyebrow.icon size={14} />}
         label={eyebrow.label}
@@ -51,7 +69,11 @@ export default function FinanceShell({
         // the label and border to primary.dark in light mode.
         variant="outlined"
         size="small"
-        sx={{ mb: 0.5 }}
+        // `alignSelf` keeps the chip its own width. Without it a `fill` screen,
+        // whose shell is a flex column, stretches it the whole width of the
+        // page — a chip-shaped rule across the top. No effect on the ordinary
+        // block layout every other screen uses.
+        sx={{ mb: 0.5, alignSelf: "flex-start" }}
       />
       <Typography variant="h5" sx={{ mb: 0.5 }}>
         {title}
@@ -63,7 +85,9 @@ export default function FinanceShell({
       )}
 
       {configured ? (
-        children
+        // The title block above keeps its natural height; whatever is left
+        // belongs to the screen.
+        fill ? <Box sx={fillColumn}>{children}</Box> : children
       ) : (
         <Alert severity="info" sx={{ mt: 1.5 }}>
           This app isn't connected yet. Set <code>{configKey}</code> in{" "}
