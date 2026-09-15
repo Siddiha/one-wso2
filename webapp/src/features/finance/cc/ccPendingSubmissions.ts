@@ -178,11 +178,16 @@ export function applyBulkEdit(
           next = { ...next, expenseTypeLabel: value, ...clearDependentFields("expenseType") };
           break;
         case "productUnit":
-          // :133-140 guards on the FORM's category, not the row's — a bulk edit
-          // that switches these rows to Travel must not also stamp a
-          // hand-picked unit on them, because a travel row's units come from
-          // its job number.
-          if (form.expenseCategory !== CC_TRAVEL_CATEGORY) {
+          // The row's category as it stands after this edit — which is the
+          // form's when the form set one, and the row's own when it did not.
+          //
+          // :133-140 guards on the FORM's category alone. That is a hole: leave
+          // the category blank, pick only a product unit, and a Travel row in
+          // the selection is stamped with a hand-picked unit, when a travel
+          // row's units are supposed to come from its job number. Checking the
+          // row instead closes it and still does what the source does whenever
+          // the form names a category.
+          if (next.expenseCategoryLabel !== CC_TRAVEL_CATEGORY) {
             next.productUnit = units.productUnits[Number(value)] ?? null;
             next.businessUnit = units.businessUnits[Number(value)] ?? null;
           }

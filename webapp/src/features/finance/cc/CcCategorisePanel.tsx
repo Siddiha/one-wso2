@@ -166,8 +166,24 @@ export function CcCategorisePanel({
   // The autosave thunk, held through a ref the render keeps current — see the
   // hook call below for why it is indirected rather than passed inline.
   const autosave = useRef<() => Promise<void>>(async () => {});
+  // The signature as of the latest render, for `persist` to compare against
+  // when it finishes — its own `row` argument is whatever was current when the
+  // write STARTED, which may be several edits ago by the time it lands.
+  const latestSignature = useRef(signature(txn));
+  latestSignature.current = signature(effective);
 
   const persist = async (row: CcTransaction): Promise<boolean> => {
+    // :568-575 — a job with no funding sources cannot be charged against, so it
+    // is never written. `CcEditDialog` refuses the same case; without this the
+    // autosave, the Save button and `saveNow` would all persist a travel row
+    // against a job finance cannot book it to.
+    //
+    // Only `jobUnusable`, never `!jobUsable`: a lookup that has not resolved,
+    // or failed, must still let a part-finished draft be saved.
+    if (isTravel && jobUnusable) {
+      setSaveError("No funding sources found for the selected Job number.");
+      return false;
+    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -178,7 +194,14 @@ export function CcCategorisePanel({
       // moment the reader moves on, and that unmount is batched into the same
       // commit — so there is no render in between for the thunk below to
       // notice the row is clean, and the hook would flush a duplicate POST.
-      autosave.current = async () => {};
+      //
+      // Only when nothing has changed since this write began. A save can still
+      // be in flight while the reader carries on typing, and disarming then
+      // would drop THEIR edit: the queued thunk would resolve without writing
+      // and the hook would record the newer signature as saved.
+      if (latestSignature.current === signature(row)) {
+        autosave.current = async () => {};
+      }
       return true;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -203,7 +226,13 @@ export function CcCategorisePanel({
   // defers to whatever the latest render, or `persist`, last decided.
   autosave.current = async () => {
     if (!dirty) return;
-    await persist(effective);
+    // Rethrow a failed write. `persist` resolves false rather than throwing so
+    // the Save button can stay put on the row, but swallowing that here let the
+    // hook record the signature as saved: the chip read "Draft saved" next to
+    // the error alert, and nothing retried.
+    if (!(await persist(effective))) {
+      throw new Error("Could not save the draft");
+    }
   };
   const draftState = useDraftAutosave(
     signature(effective),
@@ -554,7 +583,9 @@ export function CcCategorisePanel({
               size="small"
               variant="contained"
               // :1595-1599 — nothing to save, or a save already in flight.
-              disabled={!dirty || saving || jobDetails.isFetching}
+              // A job with no funding sources is refused by `persist`, so say so
+              // here rather than letting the press fail silently.
+              disabled={!dirty || saving || jobDetails.isFetching || (isTravel && jobUnusable)}
               onClick={() => void persist(effective)}
               sx={{ fontWeight: 600, minWidth: 90 }}
             >

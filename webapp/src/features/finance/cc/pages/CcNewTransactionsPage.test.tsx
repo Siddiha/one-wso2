@@ -65,16 +65,27 @@ const complete: CcTransaction = {
   productUnit: "Integration",
   businessUnit: "Platform",
 };
+/** On the other card, so switching cards has something to switch to. */
+const onSecondCard: CcTransaction = {
+  ...base,
+  id: 3,
+  ccNumber: "2222",
+  txnDescription: "Taxi",
+  txnAmount: 40,
+};
 
 vi.mock("../useCc", () => ({
   useCcUserInfo: () => ({ data: { workEmail: "me@wso2.com" }, isLoading: false, isError: false }),
   useCreditCards: () => ({
-    data: [{ id: 1, ccNumber: "1111", label: "Mine", status: "Active", employeeEmail: "me@wso2.com", bankCode: "amex" }],
+    data: [
+      { id: 1, ccNumber: "1111", label: "Mine", status: "Active", employeeEmail: "me@wso2.com", bankCode: "amex", countNew: 2 },
+      { id: 2, ccNumber: "2222", label: "Spare", status: "Active", employeeEmail: "me@wso2.com", bankCode: "svb", countNew: 1 },
+    ],
     isLoading: false,
     isError: false,
   }),
   useCcTransactions: () => ({
-    data: [incomplete, complete],
+    data: [incomplete, complete, onSecondCard],
     isLoading: false,
     isError: false,
     isSuccess: true,
@@ -94,12 +105,21 @@ vi.mock("../useCc", () => ({
     },
     jobNumbers: { data: { jobNumbers: ["JOB-1"] }, isError: false },
   }),
-  useCcJobNumberDetails: () => ({ data: undefined, isError: false, isFetching: false }),
+  // Reassigned per test — a travel job that resolves with no funding sources
+  // cannot be charged against, and must never be written.
+  useCcJobNumberDetails: () => jobDetails,
 }));
+
+let jobDetails: { data: unknown; isError: boolean; isFetching: boolean } = {
+  data: undefined,
+  isError: false,
+  isFetching: false,
+};
 
 // Every POST /transactions/save-draft and /transactions/employee-submit.
 const drafts: CcTransaction[][] = [];
 const submitted: CcTransaction[][] = [];
+let saveFails = false;
 vi.mock("../useCcMutations", () => ({
   useCcEmployeeSubmit: () => ({
     mutate: (rows: CcTransaction[]) => submitted.push(rows),
@@ -110,6 +130,7 @@ vi.mock("../useCcMutations", () => ({
   useCcCardLabel: () => ({ mutate: vi.fn(), isPending: false }),
   useCcSaveDraft: () => ({
     mutateAsync: async (rows: CcTransaction[]) => {
+      if (saveFails) throw new Error("backend said no");
       drafts.push(rows);
     },
     isPending: false,
@@ -130,6 +151,8 @@ const { NotificationsProvider } = await import("@context/notifications/Notificat
 beforeEach(() => {
   drafts.length = 0;
   submitted.length = 0;
+  saveFails = false;
+  jobDetails = { data: undefined, isError: false, isFetching: false };
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -425,5 +448,111 @@ describe("moving off a row with unsaved edits", () => {
     await user.click((await rowBoxes())[0]);
 
     expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+  });
+});
+
+// Review findings, each with the behaviour that was wrong before it.
+describe("a travel job with no funding sources", () => {
+  // EditPane.tsx:568-575 — such a job cannot be charged against, so it is never
+  // applied. The panel used to save anyway: Save, the autosave and Save &
+  // Continue all wrote a travel row against a job finance could not book it to.
+  const unusable = {
+    data: {
+      engagementCode: "ENG-1",
+      engagementType: "T&M",
+      country: "LK",
+      productUnit: "",
+      businessUnit: "",
+      fundingSources: [],
+    },
+    isError: false,
+    isFetching: false,
+  };
+
+  it("says so, and refuses to save the row", async () => {
+    jobDetails = unusable;
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("2 - Flight");
+    await pick(user, "Expense Category", "Travel");
+
+    expect(
+      screen.getByText("No funding sources found for the selected Job number."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("is not written by the autosave either", async () => {
+    jobDetails = unusable;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTimeAsync });
+    show();
+    await screen.findByText("2 - Flight");
+    await pick(user, "Expense Category", "Travel");
+
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(drafts).toHaveLength(0);
+  });
+});
+
+// The chip used to read "Draft saved" beside the error alert, because the
+// wrapper swallowed the failure — and the hook, believing it, never retried.
+describe("an autosave the backend refuses", () => {
+  it("says the draft was not saved", async () => {
+    saveFails = true;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTimeAsync });
+    show();
+    await screen.findByText("2 - Flight");
+    await user.type(commentBox(), "!");
+
+    await vi.advanceTimersByTimeAsync(5200);
+    await waitFor(() => expect(screen.getByText("Draft not saved")).toBeInTheDocument());
+    expect(screen.queryByText("Draft saved")).toBeNull();
+  });
+});
+
+// Switching cards replaces the list and the row the panel is on.
+describe("switching cards", () => {
+  const switchToSpare = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("combobox", { name: "Credit card" }));
+    await user.click(await screen.findByRole("option", { name: /2222/ }));
+  };
+
+  it("shows that card's transactions", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("Flight");
+    await switchToSpare(user);
+
+    expect(await screen.findByText("Taxi")).toBeInTheDocument();
+    expect(screen.queryByText("Flight")).toBeNull();
+  });
+
+  it("asks first when the panel has unsaved edits", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("2 - Flight");
+    await user.type(commentBox(), "!");
+    await switchToSpare(user);
+
+    // Without the guard the autosave flushed the edit on the way out and the
+    // reader was never offered the choice.
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByText("2 - Flight")).toBeInTheDocument();
+  });
+
+  it("drops a selection belonging to the card being left", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("Flight");
+    await user.click((await rowBoxes())[0]);
+    expect(screen.getByRole("button", { name: /Bulk Edit/ })).toBeEnabled();
+
+    await switchToSpare(user);
+    // `checked` holds ids and the list is filtered by card, so carrying it over
+    // left Bulk Edit enabled and badged with rows it no longer had.
+    await screen.findByText("Taxi");
+    expect(screen.getByRole("button", { name: /Bulk Edit/ })).toBeDisabled();
   });
 });

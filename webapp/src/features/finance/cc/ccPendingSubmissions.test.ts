@@ -200,6 +200,18 @@ describe("a bulk edit", () => {
     expect(out[0].businessUnit).toBe("Digital");
   });
 
+  it("will not stamp a hand-picked unit on a Travel row when no category is set", () => {
+    // The hole in the source's own guard (:133-140), which reads the form's
+    // category and not the row's: leave the category blank, pick only a unit,
+    // and a Travel row in the selection took a unit its job number should own.
+    const mixed = [complete({ id: 1 }), complete({ id: 2, expenseCategoryLabel: "Travel" })];
+    // Index 1 is Integration/Digital; both rows start on Integration/Platform,
+    // so the business unit is what tells an applied edit from an untouched row.
+    const out = applyBulkEdit({ ...CC_BULK_EDIT_EMPTY, productUnit: "1" }, mixed, UNITS);
+    expect(out.find((r) => r.id === 1)?.businessUnit).toBe("Digital");
+    expect(out.find((r) => r.id === 2)?.businessUnit).toBe("Platform");
+  });
+
   it("will not stamp a hand-picked unit on rows it is switching to Travel", () => {
     // A travel row's units come from its job number; :133-140 guards on the
     // form's category for exactly this.

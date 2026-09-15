@@ -88,7 +88,14 @@ export function CcBulkEditDialog({
 
   // EditPaneModal.tsx:214-228 — a travel row's units come from its job number,
   // so the unit field is not offered; sub-region is a marketing-only field.
-  const showProductUnit = form.expenseCategory !== CC_TRAVEL_CATEGORY;
+  //
+  // With no category chosen the question is the selection's own: offer the unit
+  // while at least one selected row is not Travel, and hide it when every one
+  // of them is, rather than showing a control that `applyBulkEdit` would refuse
+  // to apply to any of them.
+  const showProductUnit = form.expenseCategory
+    ? form.expenseCategory !== CC_TRAVEL_CATEGORY
+    : txns.some((t) => t.expenseCategoryLabel !== CC_TRAVEL_CATEGORY);
   const showSubRegion = form.expenseCategory.startsWith(CC_MARKETING_CATEGORY);
 
   const set = (field: keyof CcBulkEditForm, value: string) =>

@@ -80,7 +80,12 @@ export default function CcNewTransactionsPage() {
  */
 type PendingAction =
   | { type: "rowChange"; rowId: number }
-  | { type: "bulkSelection"; selection: Set<number> };
+  | { type: "bulkSelection"; selection: Set<number> }
+  // Switching cards replaces the whole list, and with it the row the panel is
+  // on. The source lets this one through unguarded; here it asks, because the
+  // alternative is that the autosave quietly flushes the half-typed edit on the
+  // way out and the reader is never offered the choice.
+  | { type: "cardChange"; ccNumber: string };
 
 function NewTxnBody() {
   const userInfo = useCcUserInfo();
@@ -162,8 +167,19 @@ function NewTxnBody() {
   // :200-251 — anything that swaps what the panel is showing goes through here,
   // so half-typed work is never dropped without being offered back.
   const runAction = (action: PendingAction) => {
-    if (action.type === "rowChange") setSelectedRowId(action.rowId);
-    else setChecked(action.selection);
+    if (action.type === "rowChange") {
+      setSelectedRowId(action.rowId);
+      return;
+    }
+    if (action.type === "bulkSelection") {
+      setChecked(action.selection);
+      return;
+    }
+    setSelectedCard(action.ccNumber);
+    // Drop the selection with the card it belonged to. `checked` holds ids and
+    // `rows` is filtered by card, so carrying it over left Bulk Edit enabled,
+    // badged with a count of rows it no longer had, opening on none of them.
+    setChecked(new Set());
   };
 
   const guard = (action: PendingAction) => {
@@ -283,7 +299,7 @@ function NewTxnBody() {
         <CardMenu
           cards={ownCards}
           active={activeCard}
-          onSelect={setSelectedCard}
+          onSelect={(ccNumber) => guard({ type: "cardChange", ccNumber })}
           badge="countNew"
           onRename={(card, label) =>
             renameCard.mutate(
