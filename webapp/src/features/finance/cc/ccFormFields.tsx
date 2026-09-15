@@ -302,6 +302,10 @@ export function AttachmentField({
     // AttachmentButton.tsx caps at 5 MB and says so before any upload starts.
     if (file.size > CC_ATTACHMENT_MAX_BYTES) {
       showError(`File must be ${maxSizeLabel(CC_ATTACHMENT_MAX_BYTES)} or smaller.`);
+      // Clear the input on the way out. Left set, picking the SAME oversized
+      // file again fires no change event, so the second attempt would look like
+      // nothing happened at all — no message, no upload.
+      if (input.current) input.current.value = "";
       return;
     }
     try {

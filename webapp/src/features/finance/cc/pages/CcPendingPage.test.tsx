@@ -24,6 +24,13 @@ import userEvent from "@testing-library/user-event";
 vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "token" }));
 vi.mock("@asgardeo/react", () => ({ useAsgardeo: () => ({ isSignedIn: true }) }));
 
+// These two screens render a full DataGrid beside a live form and drive both
+// through `userEvent`, which types and clicks one event at a time. Several
+// tests land at 4-6s when the whole suite runs in parallel — slow, not hung, so
+// the default 5s cuts them off for reasons that have nothing to do with what
+// they assert.
+vi.setConfig({ testTimeout: 15000 });
+
 import type { CcTransaction } from "../ccTypes";
 
 const base: CcTransaction = {
@@ -342,5 +349,54 @@ describe("moving off a correction", () => {
     await user.click(await screen.findByRole("option", { name: /2222/ }));
 
     expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+  });
+});
+
+// Review findings, each with the behaviour that was wrong before it.
+describe("an incomplete correction", () => {
+  it("cannot be pushed through the unsaved-changes dialog either", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    // Save is disabled for this, but "Save & Continue" reaches `saveNow()`
+    // directly — so the rule has to live on the save path, not on the button.
+    await user.clear(commentBox());
+    await user.click(screen.getByText("Gone to finance"));
+    await user.click(await screen.findByRole("button", { name: "Save & Continue" }));
+
+    expect(edited).toHaveLength(0);
+    expect(await screen.findByText(/Please fill in all required fields/)).toBeInTheDocument();
+    // Still on the row that needs attention.
+    expect(screen.getByText("1 - Still with lead")).toBeInTheDocument();
+  });
+
+  it("stops reporting a failure once the edit is discarded", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.clear(commentBox());
+    await user.click(screen.getByText("Gone to finance"));
+    await user.click(await screen.findByRole("button", { name: "Save & Continue" }));
+    await screen.findByText(/Please fill in all required fields/);
+
+    await user.click(screen.getByRole("button", { name: "Discard & Continue" }));
+    // The alert described an edit that no longer exists.
+    expect(screen.queryByText(/Please fill in all required fields/)).toBeNull();
+  });
+});
+
+describe("reaching a row by keyboard", () => {
+  it("loads it into the panel, as clicking it does", async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByText("1 - Still with lead");
+    // The grid turns neither Enter nor Space into a row click of its own.
+    const cell = screen.getByText("Gone to finance");
+    cell.focus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByText("2 - Gone to finance")).toBeInTheDocument();
   });
 });

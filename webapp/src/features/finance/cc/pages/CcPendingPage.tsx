@@ -276,6 +276,17 @@ function PendingBody() {
                   if (next === activeRowId) return;
                   guard({ type: "rowChange", rowId: next });
                 }}
+                // The grid does not turn Enter or Space into a row click, so
+                // without this a keyboard reader could move the focus ring down
+                // the list while the panel stayed on the row they left — the
+                // one thing this screen is for.
+                onCellKeyDown={(p, e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return;
+                  const next = Number(p.id);
+                  if (next === activeRowId) return;
+                  e.preventDefault();
+                  guard({ type: "rowChange", rowId: next });
+                }}
                 getRowClassName={(p) => (p.id === activeRowId ? "selected-row" : "")}
                 initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
                 pageSizeOptions={[5, 10, 25]}

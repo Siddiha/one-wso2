@@ -132,7 +132,10 @@ export function CardMenu({
                           sx={{ ml: 1, "& .MuiBadge-badge": { fontSize: 10, height: 17, minWidth: 17 } }}
                         />
                       )}
-                      {card.status !== "Active" && (
+                      {/* Case-insensitively, the way `useCreditCards` decides
+                          which cards to keep — a backend "ACTIVE" reached the
+                          picker and was then labelled Inactive in its own row. */}
+                      {(card.status ?? "").toUpperCase() !== "ACTIVE" && (
                         <Typography component="span" sx={{ fontSize: 11, color: "text.disabled" }}>
                           Inactive
                         </Typography>

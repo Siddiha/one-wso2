@@ -24,6 +24,13 @@ import userEvent from "@testing-library/user-event";
 vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "token" }));
 vi.mock("@asgardeo/react", () => ({ useAsgardeo: () => ({ isSignedIn: true }) }));
 
+// These two screens render a full DataGrid beside a live form and drive both
+// through `userEvent`, which types and clicks one event at a time. Several
+// tests land at 4-6s when the whole suite runs in parallel — slow, not hung, so
+// the default 5s cuts them off for reasons that have nothing to do with what
+// they assert.
+vi.setConfig({ testTimeout: 15000 });
+
 import type { CcTransaction } from "../ccTypes";
 
 const base: CcTransaction = {

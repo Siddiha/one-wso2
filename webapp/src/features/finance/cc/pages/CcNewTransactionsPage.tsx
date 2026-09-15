@@ -425,6 +425,17 @@ function NewTxnBody() {
                 if (next === activeRowId) return;
                 guard({ type: "rowChange", rowId: next });
               }}
+              // The grid does not turn Enter into a row click, so without this a
+              // keyboard reader could move the focus ring down the list while
+              // the panel stayed on the row they left. Space is left alone here
+              // — this grid has checkboxes, and Space is how they are ticked.
+              onCellKeyDown={(p, e) => {
+                if (e.key !== "Enter") return;
+                const next = Number(p.id);
+                if (next === activeRowId) return;
+                e.preventDefault();
+                guard({ type: "rowChange", rowId: next });
+              }}
               getRowClassName={(p) => (p.id === activeRowId ? "selected-row" : "")}
               rowSelectionModel={{ type: "include", ids: new Set(checked) }}
               onRowSelectionModelChange={(model) => {

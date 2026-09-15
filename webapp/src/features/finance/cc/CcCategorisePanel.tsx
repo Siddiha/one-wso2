@@ -257,6 +257,18 @@ export function CcCategorisePanel({
 
   /** Save, and in review mode drop back to read-only once it lands (`:395-397`). */
   const saveRow = async (): Promise<boolean> => {
+    // The rule lives on the save path, not just on the Save button. The button
+    // is disabled for an incomplete row, but `saveNow()` is also reached from
+    // the unsaved-changes dialog's "Save & Continue" — so a reader could clear
+    // a required field, click another row and push an incomplete correction
+    // back to an approver without ever touching a Save button.
+    //
+    // Review only: a draft is allowed to be half-finished, which is the point
+    // of a draft.
+    if (review && !ccTxnComplete(effective)) {
+      setSaveError("Please fill in all required fields.");
+      return false;
+    }
     const ok = await persist(effective);
     if (ok && review) setIsEditing(false);
     return ok;
@@ -307,6 +319,10 @@ export function CcCategorisePanel({
       setDraft(baseline);
       onDraftChange(baseline);
       setIsEditing(false);
+      // The row being restored is the one that was last saved, so a failure
+      // report about the edit just thrown away no longer describes anything on
+      // screen.
+      setSaveError(null);
     },
   }));
 
@@ -715,6 +731,7 @@ export function CcCategorisePanel({
                   setDraft(baseline);
                   onDraftChange(baseline);
                   setIsEditing(false);
+                  setSaveError(null);
                 }}
                 sx={{ fontWeight: 600, minWidth: 90 }}
               >
