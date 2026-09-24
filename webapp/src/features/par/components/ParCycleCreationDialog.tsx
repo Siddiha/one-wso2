@@ -121,6 +121,7 @@ export default function ParCycleCreationDialog({
     form.parCycleName.trim() &&
     form.parCycleStartDate &&
     form.parCycleEndDate &&
+    form.parCycleEndDate > form.parCycleStartDate &&
     form.parEvaluationEndDate &&
     form.parEmployeeDeadline &&
     form.parThreeSixtyRatingDeadline &&
@@ -215,6 +216,12 @@ export default function ParCycleCreationDialog({
                 value={form.parCycleEndDate}
                 min={form.parCycleStartDate || undefined}
                 disabled={!form.parCycleStartDate}
+                error={Boolean(form.parCycleEndDate) && form.parCycleEndDate <= form.parCycleStartDate}
+                helperText={
+                  form.parCycleEndDate && form.parCycleEndDate <= form.parCycleStartDate
+                    ? "Must be later than the cycle start date"
+                    : undefined
+                }
                 onChange={set("parCycleEndDate")}
               />
             </Grid>
