@@ -65,6 +65,14 @@ import ParEmptyState from "./ParEmptyState";
 import ParHistoryReviewSection from "./ParHistoryReviewSection";
 import type { ParCycle } from "../api/types";
 
+type SpecialRatingUi = "NONE" | "TOP5P" | "TOP20P";
+
+// The backend's wire vocabulary is TOP5P/TOP20P/NOT_ASSIGNED (or the field
+// absent) — "NONE" is only this component's own UI sentinel for "no special
+// rating", so anything else read back from the server normalizes to it.
+const toSpecialRatingUi = (value: string | undefined): SpecialRatingUi =>
+  value === "TOP5P" || value === "TOP20P" ? value : "NONE";
+
 // Ports LeadReviewPanel.tsx's lead-only path, plus (via `isAdminView`) its
 // isAdminAuditViewOn branch used from the Admin Portal's Employee View/Team
 // View "Review" action. Not ported even in admin mode: editing the
@@ -93,7 +101,7 @@ export default function ParLeadReviewPanel({
   const [leadComment, setLeadComment] = useState("");
   const [adminComment, setAdminComment] = useState("");
   const [parRatingValue, setParRatingValue] = useState("");
-  const [specialRating, setSpecialRating] = useState<"NONE" | "TOP5P" | "TOP20P">("NONE");
+  const [specialRating, setSpecialRating] = useState<SpecialRatingUi>("NONE");
   const [specialRatingConfirmed, setSpecialRatingConfirmed] = useState(false);
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
   const [evidenceConfirmed, setEvidenceConfirmed] = useState(false);
@@ -115,11 +123,10 @@ export default function ParLeadReviewPanel({
     setLeadComment(decodeParComment(parRatingData.parLeadComment));
     setAdminComment(decodeParComment(parRatingData.parAdminComment));
     setParRatingValue(parRatingData.parRating && parRatingData.parRating !== "NOT_ASSIGNED" ? parRatingData.parRating : "");
-    setSpecialRating((parRatingData.parSpecialRating as "TOP5P" | "TOP20P" | undefined) ?? "NONE");
+    setSpecialRating(toSpecialRatingUi(parRatingData.parSpecialRating));
     setSpecialRatingConfirmed(
       parRatingData.parRating === top5p20pEnabledRating &&
-        Boolean(parRatingData.parSpecialRating) &&
-        parRatingData.parSpecialRating !== "NONE",
+        toSpecialRatingUi(parRatingData.parSpecialRating) !== "NONE",
     );
     setDriveFiles(parseSavedUrls(parRatingData.parPerformanceNoticeAck ?? ""));
     // par-app never persists the checkbox itself, only its effect (the
@@ -187,7 +194,10 @@ export default function ParLeadReviewPanel({
             ? {}
             : {
                 ...(parRatingValue ? { parRating: parRatingValue } : {}),
-                parSpecialRating: specialRating,
+                // The backend's wire vocabulary is TOP5P/TOP20P/NOT_ASSIGNED
+                // (manager.bal's validateParRatingModify) — "NONE" is only
+                // this component's own UI sentinel and 400s if sent as-is.
+                parSpecialRating: specialRating === "NONE" ? "NOT_ASSIGNED" : specialRating,
                 // Omitted entirely rather than sent as "" when there's no
                 // evidence — the backend's ParRatingModify constrains this
                 // field to a non-empty string whenever it's present at all
@@ -265,7 +275,7 @@ export default function ParLeadReviewPanel({
     leadComment.trim() !== savedLeadComment.trim() ||
     (isAdminView && adminComment.trim() !== savedAdminComment.trim()) ||
     (parRatingValue !== (parRatingData.parRating ?? "") && parRatingValue !== "") ||
-    specialRating !== (parRatingData.parSpecialRating ?? "NONE") ||
+    specialRating !== toSpecialRatingUi(parRatingData.parSpecialRating) ||
     driveFiles.map((f) => f.url).join("\n") !== (parRatingData.parPerformanceNoticeAck ?? "");
 
   const statusAlert = readOnly ? (
