@@ -394,7 +394,18 @@ function ApplyForm() {
       <Card variant="outlined" sx={{ p: 2 }}>
         <FieldLabel>Dates</FieldLabel>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr auto auto" }, gap: 1.5, alignItems: "end" }}>
-          <LeaveDateField label="Start" value={startDate} min={yearStart} onChange={setStartDate} />
+          <LeaveDateField
+            label="Start"
+            value={startDate}
+            min={yearStart}
+            onChange={(v) => {
+              setStartDate(v);
+              // Keep the end date from trailing behind a later start date, but
+              // only when it was still tracking the old start date — otherwise
+              // an end date the user deliberately picked would get clobbered.
+              setEndDate((prev) => (prev < v || prev === startDate ? v : prev));
+            }}
+          />
           <LeaveDateField label="End" value={endDate} min={startDate} onChange={setEndDate} />
           {/* A half-day is 0.5 days selected, not 1 — LeaveDateSelection.tsx:207-210
               substitutes the working-day figure whenever a half is chosen. */}

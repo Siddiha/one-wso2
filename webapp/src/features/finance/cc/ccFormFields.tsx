@@ -28,19 +28,23 @@
 
 import React, { useRef, useState } from "react";
 import {
+  Autocomplete,
   Box,
   Button,
+  CircularProgress,
   Collapse,
   FormControl,
-  Stack,
+  IconButton,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  TextField,
+  Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { CheckIcon, ChevronDownIcon } from "@wso2/oxygen-ui-icons-react";
+import { ChevronDownIcon, CirclePlusIcon, FileIcon } from "@wso2/oxygen-ui-icons-react";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import { describeError } from "../util/financeError";
 import { formatNice, money } from "../util/financeFormat";
@@ -107,6 +111,48 @@ export function Field({
 
 export function Placeholder() {
   return <span style={{ opacity: 0.6 }}>Select…</span>;
+}
+
+/**
+ * EditPane.tsx:1229-1246 / InputMenu.tsx:150-177 — the source's Travel Job
+ * Number is a typable Autocomplete, not a plain Select: the reader can type
+ * "Hilton" to filter a long job list down instead of scrolling it. Not
+ * `freeSolo` there either — the committed value still has to be one of the
+ * pre-loaded job numbers, typing only narrows the list.
+ *
+ * `labelId` is what `Field` clones onto the first child to name a Select via
+ * `aria-labelledby`; Select accepts that prop itself, Autocomplete does not,
+ * so this wrapper takes it and forwards it onto the actual input instead.
+ */
+export function JobNumberAutocomplete({
+  value,
+  options,
+  disabled,
+  onChange,
+  labelId,
+}: {
+  value: string | null;
+  options: string[];
+  disabled?: boolean;
+  onChange: (value: string | null) => void;
+  labelId?: string;
+}) {
+  return (
+    <Autocomplete
+      size="small"
+      options={options}
+      value={value || null}
+      disabled={disabled}
+      onChange={(_e, v) => onChange(v)}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          placeholder="Select…"
+          slotProps={{ htmlInput: { ...params.inputProps, "aria-labelledby": labelId } }}
+        />
+      )}
+    />
+  );
 }
 
 /**
@@ -246,55 +292,48 @@ export function FieldRow({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * One attachment slot: upload, view, replace, remove.
- *
- * Viewing is what the port was missing here. The old dialog showed only
- * "attached" / "none", so a receipt uploaded from this screen could never be
- * looked at again from it — AttachmentButton.tsx opens the file in the source.
+ * One attachment slot: a single bordered field, label to icon — the icon
+ * itself is the control. AttachmentButton.tsx:337-417 ("default full mode
+ * with label + box"): unattached it is a plus circle that opens the file
+ * picker; attached it becomes a file icon that opens the viewer instead.
+ * Removing is not a control here at all — AttachmentButton.tsx:467-477 puts
+ * it in the viewer, beside Download, not back on the form.
  */
 export function AttachmentField({
   label,
   fileName,
-  busy,
   disabled,
   viewOnly,
   onPick,
   onView,
-  onRemove,
 }: {
   label: string;
   fileName: string | null;
-  busy: boolean;
   disabled?: boolean;
   /**
    * Show only what is attached, and only let it be opened.
    *
-   * `AttachmentButton.tsx:406,467` does the same on a submitted transaction:
+   * `AttachmentButton.tsx:341-348` does the same on a submitted transaction:
    * viewing an existing file stays available while the row is read-only, but
-   * the upload trigger is dead and the Remove button is not rendered at all.
-   * Different from `disabled`, which greys the buttons out but still shows
-   * them — here they should not be offered in the first place.
+   * the upload trigger is dead. Different from `disabled`, which greys the
+   * control out but still shows it — here an empty slot is not offered at
+   * all, since there is nothing to view and nothing this caller may attach.
    */
   viewOnly?: boolean;
   onPick: (file: File) => Promise<void>;
   onView: () => void;
-  onRemove: () => Promise<void>;
 }) {
   const { showSuccess, showError } = useNotifications();
-  const [removing, setRemoving] = useState(false);
+  // AttachmentButton.tsx:77-80 — "local loading states specific to this
+  // component instance". Receipt and Contract are two separate instances of
+  // this component, each with its own local state, so uploading one never
+  // shows the other as busy. A shared flag from a mutation both call sites
+  // pass (`attachment.upload.isPending`) would flip on for whichever one is
+  // NOT actually uploading too — the two fields visibly busy together for a
+  // file only one of them is taking.
+  const [uploading, setUploading] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-
-  const remove = async () => {
-    setRemoving(true);
-    try {
-      await onRemove();
-      showSuccess(CC_SNACK.success.removeAttachment);
-    } catch (err) {
-      showError(describeError(err));
-    } finally {
-      setRemoving(false);
-    }
-  };
+  const has = Boolean(fileName);
 
   const handle = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -308,19 +347,30 @@ export function AttachmentField({
       if (input.current) input.current.value = "";
       return;
     }
+    setUploading(true);
     try {
       await onPick(file);
       showSuccess(CC_SNACK.success.uploadAttachment);
     } catch (err) {
       showError(describeError(err));
     } finally {
+      setUploading(false);
       if (input.current) input.current.value = "";
     }
   };
 
+  // AttachmentButton.tsx:339-348 — the source's own wording, by mode.
+  const title = viewOnly
+    ? has
+      ? `View Attach ${label}`
+      : `No attach ${label}`
+    : has
+      ? `View ${label}`
+      : `Attach ${label}`;
+  const fieldDisabled = (viewOnly && !has) || disabled || uploading;
+
   return (
     <Box>
-      <FieldLabel>{label}</FieldLabel>
       <input
         ref={input}
         type="file"
@@ -328,58 +378,53 @@ export function AttachmentField({
         onChange={handle}
         style={{ display: "none" }}
       />
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexWrap: "wrap" }}>
-        {!viewOnly && (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => input.current?.click()}
-            disabled={busy || disabled}
-            sx={{ textTransform: "none", fontWeight: 600 }}
-          >
-            {busy ? "Uploading…" : fileName ? "Replace" : "Upload"}
-          </Button>
-        )}
-        {fileName && (
-          <>
-            <Button
-              size="small"
-              variant="text"
-              onClick={onView}
-              sx={{ textTransform: "none", fontWeight: 600 }}
-            >
-              View
-            </Button>
-            {!viewOnly && (
-              <Button
-                size="small"
-                variant="text"
-                color="error"
-                onClick={remove}
-                disabled={busy || removing || disabled}
-                sx={{ textTransform: "none", fontWeight: 600 }}
-              >
-                {removing ? "Removing…" : "Remove"}
-              </Button>
-            )}
-          </>
-        )}
-        <Typography
+      {/* Nothing to describe until a file is attached — no target for a
+          picker to point at yet, so the tooltip stays off until `has`. */}
+      <Tooltip
+        describeChild
+        title={title}
+        arrow
+        disableHoverListener={!has}
+        disableFocusListener={!has}
+        disableTouchListener={!has}
+        slotProps={{
+          tooltip: { sx: { fontSize: 10.5, px: 1, py: 0.5 } },
+          popper: { modifiers: [{ name: "offset", options: { offset: [0, -14] } }] },
+        }}
+      >
+        <Box
           sx={{
-            fontSize: 12,
-            color: fileName ? "success.main" : "text.disabled",
-            display: "inline-flex",
+            display: "flex",
             alignItems: "center",
-            gap: 0.25,
+            justifyContent: "space-between",
+            height: 50,
+            border: 1,
+            borderColor: "divider",
+            borderRadius: 1.5,
+            pl: 1.75,
+            pr: 0.75,
           }}
-          noWrap
         >
-          {fileName && (
-            <CheckIcon size={13} style={{ color: "var(--oxygen-palette-success-main)", flexShrink: 0 }} />
-          )}
-          {fileName ? "attached" : "none"}
-        </Typography>
-      </Stack>
+          <Typography sx={{ fontSize: 13.5 }}>{label}</Typography>
+          <IconButton
+            size="small"
+            aria-label={title}
+            onClick={() => {
+              if (has) onView();
+              else input.current?.click();
+            }}
+            disabled={fieldDisabled}
+          >
+            {uploading ? (
+              <CircularProgress size={18} />
+            ) : has ? (
+              <FileIcon size={18} />
+            ) : (
+              <CirclePlusIcon size={18} />
+            )}
+          </IconButton>
+        </Box>
+      </Tooltip>
     </Box>
   );
 }

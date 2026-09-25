@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 // Three backends, three vocabularies, none of them the people-app roles the
@@ -40,7 +40,7 @@ vi.mock("../cc/useCc", () => ({
   useCcUserInfo: () => ({ data: { privileges: roles.cc }, isLoading: roles.loading }),
 }));
 vi.mock("../opd/useOpd", () => ({
-  useOpdUserInfo: () => ({ data: { userRoles: roles.opd }, isLoading: roles.loading }),
+  useOpdUserInfo: () => ({ data: { userRoles: roles.opd }, isLoading: roles.loading, isError: false }),
 }));
 vi.mock("../expense/useExpense", () => ({
   useExpenseAppData: () => ({
@@ -148,43 +148,20 @@ describe("the cc-approve item", () => {
   });
 });
 
-// The Overview group has two dashboard tiles now, gated differently: Credit
-// Card Expenses has no backend role of its own — it is everyone's own
-// numbers — so its group's preview flag is the only gate. OPD Claims has its
-// own backend role too, but the group's preview flag comes first: holding
-// the role means nothing while Overview itself is hidden.
+// The Overview group shipped out of preview. Its two dashboard tiles are
+// still gated differently: Credit Card Expenses has no backend role of its
+// own — it is everyone's own numbers — so it is always open. OPD Claims
+// keeps its own backend role.
 describe("the Finance Overview dashboards", () => {
-  const originalConfig = window.config;
-  afterEach(() => {
-    window.config = originalConfig;
-  });
-
-  it("refuses the credit card dashboard when the group's flag is absent", () => {
-    window.config = { ...(window.config ?? {}) } as Window["config"];
-    delete (window.config as { ONE_WSO2_PREVIEW_FEATURES?: unknown }).ONE_WSO2_PREVIEW_FEATURES;
-    expect(gate().canSee("cc-dashboard")).toBe(false);
-  });
-
-  it("allows the credit card dashboard when the group's flag is on", () => {
-    window.config = {
-      ...(window.config ?? {}),
-      ONE_WSO2_PREVIEW_FEATURES: { financeOverview: true },
-    } as Window["config"];
+  it("always allows the credit card dashboard", () => {
     expect(gate().canSee("cc-dashboard")).toBe(true);
   });
 
-  it("refuses the OPD dashboard when the group's flag is absent, role or not", () => {
-    window.config = { ...(window.config ?? {}) } as Window["config"];
-    delete (window.config as { ONE_WSO2_PREVIEW_FEATURES?: unknown }).ONE_WSO2_PREVIEW_FEATURES;
-    roles.opd = [555];
+  it("refuses the OPD dashboard without the role", () => {
     expect(gate().canSee("opd-dashboard")).toBe(false);
   });
 
-  it("allows the OPD dashboard when the group's flag is on and the role is held", () => {
-    window.config = {
-      ...(window.config ?? {}),
-      ONE_WSO2_PREVIEW_FEATURES: { financeOverview: true },
-    } as Window["config"];
+  it("allows the OPD dashboard when the role is held", () => {
     roles.opd = [555];
     expect(gate().canSee("opd-dashboard")).toBe(true);
   });

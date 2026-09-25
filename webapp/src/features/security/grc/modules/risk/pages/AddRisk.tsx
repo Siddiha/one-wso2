@@ -358,7 +358,11 @@ export default function AddRisk(): JSX.Element {
   ];
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1500, mx: "auto" }}>
+    // No `maxWidth: 1500, mx: "auto"` clamp, unlike the grc-platform source:
+    // One WSO2's side rail is narrower, so the clamp left the form centred in a
+    // band of whitespace while Risk Registers and every other page run edge to
+    // edge. Same reason as CreateAuditPage, which dropped the same clamp.
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <Typography variant="h4" fontWeight={700} sx={{ mb: 0.5 }}>
         Add a Risk
       </Typography>

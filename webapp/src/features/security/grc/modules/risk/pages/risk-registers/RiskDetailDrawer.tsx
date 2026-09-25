@@ -67,10 +67,10 @@ import {
   calcAge,
   calcDue,
   canViewInline,
+  changedValue,
   downloadBlob,
   fieldLabel,
   formatDate,
-  readValue,
   viewBlob,
 } from "./utils";
 import { useAuthApiClient } from "@features/security/grc/shim/useAuthApiClient";
@@ -90,6 +90,9 @@ export interface DrawerActions {
   onResubmit: () => void;
   onCloseRisk: () => void;
   onEdit: () => void;
+  // Opens the assignee correction for a migrated risk (see
+  // RiskDetail.assignees_editable_until).
+  onUpdateAssignees: () => void;
   onAssess: () => void;
   onCancel: () => void;
   // Adds a further action plan (Risk Assigner only).
@@ -1191,8 +1194,8 @@ export default function RiskDetailDrawer({
                 </Typography>
                 <Stack component="ul" sx={{ m: 0, pl: 2.5 }}>
                   {amendmentChanges.map((e) => {
-                    const from = readValue(e.old_value);
-                    const to = readValue(e.new_value);
+                    const from = changedValue(e.field_changed!, e.old_value);
+                    const to = changedValue(e.field_changed!, e.new_value);
                     return (
                       <Typography component="li" variant="caption" key={e.id}>
                         {fieldLabel(e.field_changed!)}
@@ -1356,6 +1359,22 @@ export default function RiskDetailDrawer({
       {/* Fixed action footer */}
       {detail && !loading && !error && (
         <Box sx={{ px: 3, pb: 3, pt: 0 }}>
+          {/* Assignee correction for a migrated risk. Outside ActionFooter's
+              per-status switch on purpose: it applies in every status,
+              CLOSED included, for as long as the backend says the window is
+              open. Same caller gate as Edit Risk. */}
+          {detail.assignees_editable_until && can(RiskPrivilege.UpdateRisk) && isRiskAssigner && (
+            <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+              <Button
+                variant="outlined"
+                fullWidth
+                disabled={actionsDisabled}
+                onClick={actions.onUpdateAssignees}
+              >
+                Update Assignees
+              </Button>
+            </Box>
+          )}
           <ActionFooter
             status={status}
             actions={actions}

@@ -574,6 +574,13 @@ export const umtServiceUrls = {
   // PUT — replaces an update's product list (distinct from product-analysis
   // results, which live at updateProductAnalysis above).
   updateProducts: (id: string | number) => `${umtBackendUrl}/update/${encodeURIComponent(id)}/products`,
+  // GET — the admin-only Product Management screen's base product catalog,
+  // distinct from the per-update product lists above.
+  baseProducts: `${umtBackendUrl}/update/base-product`,
+  // POST — adds a base product (name/version/lead+ED email/FTP connection details).
+  createBaseProduct: `${umtBackendUrl}/update/product`,
+  // PUT — deprecates an existing base product by name+version.
+  deprecateBaseProduct: `${umtBackendUrl}/update/product/deprecate`,
   // PUT — per-product description/instruction update (only these 3 keys are
   // ever sent), distinct from updateProducts's whole-list replace above.
   updateProductsDetails: (id: string | number) =>
@@ -1251,4 +1258,79 @@ export const securityBackendUrl: string = (
 
 export function isSecurityBackendConfigured(): boolean {
   return Boolean(securityBackendUrl);
+}
+
+// ---------------------------------------------------------------------------
+// RevOps backend. RevOps is the One WSO2 perspective for the call-review
+// experience; the service behind it is people-ops-suite's meet-app backend,
+// reused unchanged. The naming difference is deliberate and worth knowing: the
+// config key and everything in this app say "revops" because that is what a
+// user opens, while the contract, the roles and the error messages all belong
+// to meet-app. See docs/ported-apps/revops-meetings.md.
+export const revOpsBackendUrl: string = window.config?.ONE_WSO2_REVOPS_BACKEND_URL ?? "";
+
+export function isRevOpsBackendConfigured(): boolean {
+  return Boolean(revOpsBackendUrl);
+}
+
+export const revOpsServiceUrls = {
+  // Employee profile + privileges. The privileges array is what useRevOpsGate
+  // reads to tell a meet-app ADMIN from an ordinary TEAM member.
+  userInfo: `${revOpsBackendUrl}/user-info`,
+  // The regions the region filter offers. A bare string list, not objects.
+  regions: `${revOpsBackendUrl}/regions`,
+  // The meeting list. Every filter is a query parameter and paging is
+  // server-side, so the caller passes limit/offset rather than slicing a
+  // full list client-side — see buildMeetingsUrl below.
+  meetings: `${revOpsBackendUrl}/meetings`,
+  // Drive files attached to one meeting's calendar event: the recording, and
+  // whatever else was attached. Returns links, never file content.
+  attachments: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/attachments`,
+  // Cancels a meeting. The backend refuses unless the caller is the host or a
+  // meet-app admin, so the UI's own check is a courtesy, not the control.
+  meeting: (meetingId: number): string => `${revOpsBackendUrl}/meetings/${meetingId}`,
+  // One meeting, for the detail page. The list endpoint cannot serve a direct link: it is
+  // paged and filtered, so the meeting asked for may be on no page the caller would fetch.
+  meetingById: (meetingId: number): string => `${revOpsBackendUrl}/meetings/${meetingId}`,
+  // The conversation as timed, speaker-attributed lines — what a synchronised transcript
+  // is built from. 404 when the meeting predates the transcript resource name being stored,
+  // in which case there is only the Drive document.
+  transcript: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/transcript`,
+  // Gemini's notes, as plain text. Meet writes these only as a Google Doc.
+  smartNotes: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/smart-notes`,
+  // A signed, time-limited URL for streaming this meeting's recording. The URL it returns
+  // points at drive-service, NOT here — streaming is deliberately not this backend's job.
+  // 404 means either playback isn't configured or no recording is attached yet; the two
+  // are distinguished by the message, and neither is an error worth a banner.
+  playback: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/playback`,
+};
+
+/**
+ * Build the meetings URL with only the filters that are actually set.
+ *
+ * The backend rejects `searchString` combined with `host` or `title` with a
+ * 400, so this app only ever sends `searchString` — the one search box maps to
+ * it, and the narrower two are deliberately not exposed.
+ *
+ * Omitted rather than sent empty: a blank `region` or `searchString` would
+ * filter on the empty string rather than mean "no filter".
+ */
+export function buildMeetingsUrl(params: {
+  searchString?: string | null;
+  region?: string | null;
+  endTime?: string | null;
+  limit: number;
+  offset: number;
+}): string {
+  const qs = new URLSearchParams();
+  if (params.searchString?.trim()) qs.set("searchString", params.searchString.trim());
+  if (params.region?.trim()) qs.set("region", params.region.trim());
+  if (params.endTime?.trim()) qs.set("endTime", params.endTime.trim());
+  qs.set("limit", String(params.limit));
+  qs.set("offset", String(params.offset));
+  return `${revOpsServiceUrls.meetings}?${qs.toString()}`;
 }

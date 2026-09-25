@@ -230,6 +230,53 @@ describe("what happens when the form is not ready", () => {
   });
 });
 
+// LeaveApplyPage.tsx:401-406. Moving the start date forward drags the end
+// date along so it never trails behind — but only while the end date is still
+// where the sync left it. Moving the start date back must bring the end date
+// back too, or a corrected single-day pick quietly turns into a multi-day one.
+describe("keeping the end date in sync with the start date", () => {
+  it("brings the end date back when the start date moves back to it", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    show();
+
+    const start = screen.getByLabelText("Start");
+    const end = screen.getByLabelText("End");
+    const originalStart = (start as HTMLInputElement).value;
+
+    // Start jumps forward past the (still-default) end date; end follows.
+    await user.clear(start);
+    await user.type(start, "2030-06-15");
+    expect(end).toHaveValue("2030-06-15");
+
+    // Start is corrected back to where it began; end should follow back down
+    // rather than leaving a stale, later end date behind.
+    await user.clear(start);
+    await user.type(start, originalStart);
+    expect(end).toHaveValue(originalStart);
+  });
+
+  it("leaves an end date the user deliberately picked alone", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    show();
+
+    const start = screen.getByLabelText("Start");
+    const end = screen.getByLabelText("End");
+
+    await user.clear(start);
+    await user.type(start, "2030-06-15");
+    expect(end).toHaveValue("2030-06-15");
+
+    // The user picks their own, later end date.
+    await user.clear(end);
+    await user.type(end, "2030-06-20");
+
+    // Nudging the start date forward again must not clobber that choice.
+    await user.clear(start);
+    await user.type(start, "2030-06-16");
+    expect(end).toHaveValue("2030-06-20");
+  });
+});
+
 // GeneralLeave.tsx:222-229 — nothing is posted until this is answered.
 describe("the confirmation before posting", () => {
   it("names the type, the days, the range and the portion", async () => {

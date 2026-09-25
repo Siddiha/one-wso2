@@ -24,7 +24,7 @@
  * branching the build or holding work out of `main`.
  *
  * ```js
- * ONE_WSO2_PREVIEW_FEATURES: { financeOverview: true },
+ * ONE_WSO2_PREVIEW_FEATURES: { umt: true },
  * ```
  *
  * ## Absent means off
@@ -55,13 +55,6 @@
  */
 export type PreviewFeature =
   /**
-   * Finance → Overview, the new dashboards section above the claim apps.
-   * Held back as a whole: it is new ground (an OPD Claims dashboard and a
-   * Credit Card Expenses dashboard, with an expense dashboard to follow),
-   * and it has not run against a real account yet.
-   */
-  | "financeOverview"
-  /**
    * The whole UMT perspective — rail entry, launcher tile, landing-page
    * option, favourites eligibility, and the `/umt` route. UMT is still being
    * ported: only its dashboard exists so far (see perspectives.ts), and that
@@ -71,8 +64,7 @@ export type PreviewFeature =
    * unrelated and keeps working the same regardless of this flag.
    */
   | "umt"
-  /**
-   * The whole Infra Portal perspective. Still being ported, so the waffle
+  /* The whole Infra Portal perspective. Still being ported, so the waffle
    * tile, landing option, and `/infra` route stay hidden until this is on.
    */
   | "infra";

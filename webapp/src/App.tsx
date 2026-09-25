@@ -21,6 +21,8 @@ import { landingPath } from "@config/landingConfig";
 import SettingsPage from "@features/settings/pages/SettingsPage";
 import MenuHomePage from "@features/menu/pages/MenuHomePage";
 import OrgChartPage from "@features/org-chart/pages/OrgChartPage";
+import RevOpsMeetingsPage from "@features/revops/pages/RevOpsMeetingsPage";
+import MeetingDetailPage from "@features/revops/pages/MeetingDetailPage";
 import AuthGuard from "@layouts/AuthGuard";
 import { isPreviewEnabled } from "@config/previewFeatures";
 import AppLayout from "@layouts/AppLayout";
@@ -142,6 +144,7 @@ import DueDiligencePreferencesPage from "@features/due-diligence/preferences/pag
 import ViewPdfPage from "@features/due-diligence/shared/pages/ViewPdfPage";
 import ViewImagePage from "@features/due-diligence/shared/pages/ViewImagePage";
 import UmtHomePage from "@features/umt/pages/UmtHomePage";
+import UmtProductsPage from "@features/umt/pages/UmtProductsPage";
 import UmtUpdateView from "@features/umt/pages/UmtUpdateView";
 import UmtUpdatesPage from "@features/umt/pages/UmtUpdatesPage";
 import InfraHomePage from "@features/infra/pages/InfraHomePage";
@@ -163,6 +166,9 @@ export default function App() {
               <Route path="umt" element={<UmtHomePage />} />
               <Route path="umt/updates" element={<UmtUpdatesPage />} />
               <Route path="umt/updates/:id" element={<UmtUpdateView />} />
+              {/* Admin-only: UmtProductsPage itself enforces this via UmtShell's
+                  requireAdmin, independent of the rail item's own visibility. */}
+              <Route path="umt/products" element={<UmtProductsPage />} />
             </>
           )}
           {isPreviewEnabled("infra") && (
@@ -307,25 +313,16 @@ export default function App() {
               </SriLankaRoute>
             }
           />
-          {/* Behind the same preview flag as its menu entry under Overview.
-              Hiding only the entry would leave the page reachable by anyone
-              with the URL. Moved here out of the plain cc routes below: this
-              is the same screen the "Dashboard" item used to point at when it
-              lived inside Credit Card Expenses. */}
-          {isPreviewEnabled("financeOverview") && (
-            <Route path="finance/cc/dashboard" element={<CcDashboardPage />} />
-          )}
+          {/* Moved here out of the plain cc routes below: this is the same
+              screen the "Dashboard" item used to point at when it lived
+              inside Credit Card Expenses. */}
+          <Route path="finance/cc/dashboard" element={<CcDashboardPage />} />
           <Route path="finance/cc/new" element={<CcNewTransactionsPage />} />
           <Route path="finance/cc/pending" element={<CcPendingPage />} />
           <Route path="finance/cc/approve" element={<CcApprovePage />} />
           <Route path="finance/cc/history" element={<CcHistoryPage />} />
           <Route path="finance/cc/settings" element={<CcSettingsPage />} />
-          {/* Behind the same preview flag as its menu entry under Overview.
-              Hiding only the entry would leave the page reachable by anyone
-              with the URL. */}
-          {isPreviewEnabled("financeOverview") && (
-            <Route path="finance/opd/dashboard" element={<OpdDashboardScreen />} />
-          )}
+          <Route path="finance/opd/dashboard" element={<OpdDashboardScreen />} />
           <Route path="people-ops" element={<PerspectiveLanding />} />
           {/* People Ops → Org Chart: the company's reporting hierarchy, ported
               from the standalone org-chart app. Unlike every other People Ops
@@ -646,6 +643,19 @@ export default function App() {
             path="marketing-ops/design-studio/post-builder"
             element={<PostBuilderPage />}
           />
+          {/* RevOps — auto-recorded meetings. The meeting history ported from
+              meet-app; scheduling stays in the calendar add-on and the
+              analytics dashboard was out of scope. No route-level guard: the
+              meet-app backend refuses a caller in no authorised group on
+              every endpoint, and RevOpsShell turns that 403 into an
+              explanation, so someone reaching this URL gets an answer rather
+              than a blank page. See docs/ported-apps/revops-meetings.md. */}
+          <Route path="revops" element={<RevOpsMeetingsPage />} />
+          {/* One meeting: the recording, and the call's details. A route rather than a
+              dialog because a recording is something people send each other, and a dialog
+              has no address — this survives a refresh, a bookmark and a paste into Slack.
+              The transcript and smart notes land in its left column. */}
+          <Route path="revops/meetings/:meetingId" element={<MeetingDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
           {/* Me → Menu: the cafeteria screen ported from the standalone
               menu app. One page, as the original was. The functional spec and

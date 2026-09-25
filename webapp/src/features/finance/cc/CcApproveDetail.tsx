@@ -17,8 +17,8 @@
  */
 
 import { useState } from "react";
-import { Box, Button, Collapse, Stack, Typography } from "@wso2/oxygen-ui";
-import { ChevronDownIcon } from "@wso2/oxygen-ui-icons-react";
+import { Box, Button, Collapse, IconButton, Stack, Tooltip, Typography } from "@wso2/oxygen-ui";
+import { ChevronDownIcon, CirclePlusIcon, FileIcon } from "@wso2/oxygen-ui-icons-react";
 import { useAccessToken } from "@hooks/useAccessToken";
 import { ccServiceUrls } from "@config/apiConfig";
 import { ReceiptViewer } from "../components/ReceiptViewer";
@@ -66,9 +66,14 @@ export function CcApproveDetail({
           hover when it is too long to show. */}
       <Box sx={{ bgcolor: "action.hover", borderRadius: 1.5, p: 1.5 }}>
         <Stack direction="row" alignItems="flex-start" spacing={1.5}>
-          <Typography title={txn.txnDescription ?? ""} sx={{ fontSize: 15, fontWeight: 700, flex: 1, lineHeight: 1.35 }}>
-            {txn.id} - {txn.txnDescription}
-          </Typography>
+          {/* A proper Tooltip, not the native `title` attribute — the
+              browser's own tooltip is slow to appear and styled outside the
+              app entirely. */}
+          <Tooltip describeChild title={txn.txnDescription ?? ""} arrow>
+            <Typography sx={{ fontSize: 15, fontWeight: 700, flex: 1, lineHeight: 1.35 }}>
+              {txn.id} - {txn.txnDescription}
+            </Typography>
+          </Tooltip>
           <Typography sx={{ fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
             ${bareAmount(txn.txnAmount)}
           </Typography>
@@ -157,21 +162,38 @@ function Value({ label, value, fallback }: { label: string; value: string | null
 }
 
 /**
- * An attachment an approver may open but not change — `AttachmentButton.tsx:406,
- * 467` keeps the file viewable while the row is not theirs to edit and offers
- * no upload or remove.
+ * An attachment an approver may open but not change — `AttachmentButton.tsx:341-
+ * 348` keeps the file viewable while the row is not theirs to edit and offers
+ * no upload or remove. Same file-icon-vs-add-icon switch the editable
+ * AttachmentField uses (`AttachmentButton.tsx:406-414` does the same in
+ * disableEdit mode too) so an empty slot reads as empty rather than looking
+ * like a dimmed copy of an attached one — inside this panel's own dashed
+ * field style, which every sibling value here (`Value`, above) already uses.
  */
 function Attachment({ label, fileName, onView }: { label: string; fileName: string | null; onView: () => void }) {
+  const has = Boolean(fileName);
   return (
-    <Box sx={{ border: "1.5px dashed", borderColor: "divider", borderRadius: 1.5, px: 1.5, py: 1, minWidth: 0 }}>
-      <Caption>{label}</Caption>
-      {fileName ? (
-        <Button size="small" variant="text" onClick={onView} sx={{ textTransform: "none", fontWeight: 600, px: 0, minWidth: 0 }}>
-          View
-        </Button>
-      ) : (
-        <Typography sx={{ fontSize: 12.5, color: "text.disabled" }}>none</Typography>
-      )}
+    <Box sx={{ border: "1.5px dashed", borderColor: "divider", borderRadius: 1.5, px: 1.5, py: 0.5, minWidth: 0 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+        <Caption>{label}</Caption>
+        {/* Nothing to describe when there's nothing attached — no tooltip
+            until `has`. */}
+        <Tooltip
+          describeChild
+          title={has ? `View ${label}` : `No attach ${label}`}
+          arrow
+          disableHoverListener={!has}
+          disableFocusListener={!has}
+          disableTouchListener={!has}
+          slotProps={{ tooltip: { sx: { fontSize: 10.5, px: 1, py: 0.5 } } }}
+        >
+          <span>
+            <IconButton size="small" aria-label={`View ${label}`} onClick={onView} disabled={!has}>
+              {has ? <FileIcon size={16} /> : <CirclePlusIcon size={16} />}
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Stack>
     </Box>
   );
 }

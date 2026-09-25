@@ -35,7 +35,6 @@ import {
 } from "@wso2/oxygen-ui-icons-react";
 import { CC_PATH } from "@features/finance/cc/ccPaths";
 import { opdFinancePaths } from "@features/finance/opd/opdFinancePaths";
-import { isPreviewEnabled } from "@config/previewFeatures";
 import type { MenuApp } from "@constants/appMenu";
 
 /**
@@ -80,52 +79,45 @@ export const ME_FINANCE_APPS: readonly MenuApp[] = [
  * is not what you came for when you wanted the numbers.
  *
  * Two entries today — Credit Card Expenses and OPD Claims. The expense
- * dashboard belongs here too when somebody moves it. Held back as a whole
- * behind its own preview flag: this is new ground and has not run against a
- * real account yet.
+ * dashboard belongs here too when somebody moves it.
  */
-export const FINANCE_OVERVIEW_APPS: readonly MenuApp[] = isPreviewEnabled("financeOverview")
-  ? [
+export const FINANCE_OVERVIEW_APPS: readonly MenuApp[] = [
+  {
+    key: "finance-overview",
+    name: "Overview",
+    icon: LayoutDashboardIcon,
+    purpose: "How the company's card spend and claim allowances are being used.",
+    // Two items today and it will not stay that way; collapsing to a leaf
+    // now would teach the wrong shape and make the entry vanish as a
+    // concept the day a third one lands.
+    alwaysGroup: true,
+    items: [
       {
-        key: "finance-overview",
-        name: "Overview",
-        icon: LayoutDashboardIcon,
-        purpose: "How the company's card spend and claim allowances are being used.",
-        // Two items today and it will not stay that way; collapsing to a leaf
-        // now would teach the wrong shape and make the entry vanish as a
-        // concept the day a third one lands.
-        alwaysGroup: true,
-        items: [
-          {
-            // The id is unchanged, so `useFinanceGate`, the rail's active-item
-            // matching and anyone's saved favourite all keep working. Only where
-            // it is listed has moved; the route is the same screen it always was.
-            id: "cc-dashboard",
-            label: "Credit Card Expenses",
-            desc: "Unsubmitted spend, how long it has been sitting, and what has been claimed.",
-            // Not a coarse capability: forces useFinanceGate to answer for the
-            // id — see its `cc-dashboard` case — so the group's own flag is
-            // enforced even if something one day asks the gate by hand,
-            // bypassing this registry entry the way the Finance overview
-            // pattern already does for other items.
-            requires: ["employee"],
-            path: `${CC_PATH}/dashboard`,
-          },
-          {
-            id: "opd-dashboard",
-            label: "OPD Claims",
-            desc: "Claims processed and pending, and how much of each employee's OPD limit is used.",
-            // Not a coarse capability: the OPD backend decides this, and the
-            // source puts the screen behind its finance view. `requires` only
-            // forces useFinanceGate to answer for the id — see its
-            // `opd-dashboard` case.
-            requires: ["admin"],
-            path: opdFinancePaths.dashboard,
-          },
-        ],
+        // The id is unchanged, so `useFinanceGate`, the rail's active-item
+        // matching and anyone's saved favourite all keep working. Only where
+        // it is listed has moved; the route is the same screen it always was.
+        id: "cc-dashboard",
+        label: "Credit Card Expenses",
+        desc: "Unsubmitted spend, how long it has been sitting, and what has been claimed.",
+        // Not a coarse capability: forces useFinanceGate to answer for the
+        // id — see its `cc-dashboard` case.
+        requires: ["employee"],
+        path: `${CC_PATH}/dashboard`,
       },
-    ]
-  : [];
+      {
+        id: "opd-dashboard",
+        label: "OPD Claims",
+        desc: "Claims processed and pending, and how much of each employee's OPD limit is used.",
+        // Not a coarse capability: the OPD backend decides this, and the
+        // source puts the screen behind its finance view. `requires` only
+        // forces useFinanceGate to answer for the id — see its
+        // `opd-dashboard` case.
+        requires: ["admin"],
+        path: opdFinancePaths.dashboard,
+      },
+    ],
+  },
+];
 
 export const FINANCE_PERSPECTIVE_APPS: readonly MenuApp[] = [
   // Expense Claims used to have its own Finance front door here — New Claim,

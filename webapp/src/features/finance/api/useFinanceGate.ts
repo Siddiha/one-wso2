@@ -20,7 +20,6 @@ import { ccHasAccess } from "../cc/ccTypes";
 import { useOpdUserInfo } from "../opd/useOpd";
 import { OPD_ROLE, opdHasRole } from "../opd/opdTypes";
 import { useExpenseAppData } from "../expense/useExpense";
-import { isPreviewEnabled } from "@config/previewFeatures";
 
 // Items that declare `requires` in the registry but aren't explicitly mapped
 // below must fail CLOSED — otherwise a renamed or newly-added restricted item
@@ -77,17 +76,16 @@ export function useFinanceGate(enabled = true): FinanceGate {
       // with nothing on screen to say why. The screen behind it carries its own
       // error notice and a retry.
       case "opd-dashboard":
-        return isPreviewEnabled("financeOverview") && (opdFinance || opd.isError);
+        return opdFinance || opd.isError;
       case "cc-approve":
         return ccLeadOrFinance;
       case "cc-settings":
         return ccFinance;
       // Finance → Overview → Credit Card Expenses dashboard. `requires:
       // ["employee"]` on the registry item exists only to force this case —
-      // it is everyone's own numbers to read, same as the dashboard always
-      // was; the group's own flag is the actual gate.
+      // it is everyone's own numbers to read, same as the dashboard always was.
       case "cc-dashboard":
-        return isPreviewEnabled("financeOverview");
+        return true;
       default:
         // Per-user views (New / Pending / History) are open; any other item
         // that declares `requires` but reaches here fails closed rather than

@@ -30,7 +30,7 @@ import {
 } from "@wso2/oxygen-ui";
 import { humanizeHttpError } from "@api/http";
 import type { PromotionHistoryEntry, PromotionType } from "../api/types";
-import { formatDate } from "../api/derive";
+import { formatDate, sortPromotionsByBand } from "../api/derive";
 import { usePromotionHistory } from "../api/usePromotionHistory";
 
 // "View promotion history" popup. Fetches on open only (query gated by
@@ -49,18 +49,14 @@ export default function PromotionHistoryDialog({
 }) {
   const query = usePromotionHistory(workEmail, open);
 
-  // Newest first — backend order isn't guaranteed. Fall back to id when
-  // updatedOn is missing (shouldn't happen, but a defensive sort key
-  // keeps rendering stable).
-  const entries = useMemo<PromotionHistoryEntry[]>(() => {
-    const list = query.data?.promotionRequests ?? [];
-    return [...list].sort((a, b) => {
-      const ta = a.updatedOn ? Date.parse(a.updatedOn) : 0;
-      const tb = b.updatedOn ? Date.parse(b.updatedOn) : 0;
-      if (tb !== ta) return tb - ta;
-      return b.id - a.id;
-    });
-  }, [query.data]);
+  // Newest first — backend order isn't guaranteed. Ordered by job band
+  // rather than updatedOn so this list agrees with the "Last promotion"
+  // line on the profile card, which names entries[0]; see
+  // sortPromotionsByBand for why the band is the reliable sort key.
+  const entries = useMemo<PromotionHistoryEntry[]>(
+    () => sortPromotionsByBand(query.data?.promotionRequests ?? []),
+    [query.data],
+  );
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -86,15 +82,6 @@ export default function PromotionHistoryDialog({
             </Typography>
             <Typography sx={{ fontSize: 12.5 }}>{humanizeHttpError(query.error)}</Typography>
           </Alert>
-        ) : entries.length === 0 ? (
-          <Box sx={{ py: 3, textAlign: "center" }}>
-            <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
-              No approved promotion records on file.
-            </Typography>
-            <Typography sx={{ fontSize: 12, color: "text.disabled", mt: 0.5 }}>
-              Once a promotion cycle approves your request, it'll show up here.
-            </Typography>
-          </Box>
         ) : (
           <Stack spacing={1.25}>
             {entries.map((e) => (
@@ -132,13 +119,13 @@ function HistoryRow({ entry }: { entry: PromotionHistoryEntry }) {
         </Typography>
         <TypeChip type={entry.promotionType} />
       </Stack>
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 0.5 }}>
-        <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>
-          {entry.currentJobRole || "—"}
-        </Typography>
-        <Typography sx={{ fontSize: 12, color: "text.disabled" }}>·</Typography>
-        <BandJump from={entry.currentJobBand} to={entry.nextJobBand} />
-      </Stack>
+      {/* currentJobRole is deliberately not shown: the stored values are
+          unreliable, and the field is the role held before the promotion
+          rather than the one it led to — the promotion backend records no
+          target role at all. That leaves the band jump as the only
+          description of what the promotion was, so it carries the row
+          rather than sitting in metadata type beneath it. */}
+      <BandJump from={entry.currentJobBand} to={entry.nextJobBand} />
       {orgLine && (
         <Typography sx={{ fontSize: 11.5, color: "text.disabled", mb: 0.5 }} noWrap>
           {orgLine}
@@ -157,24 +144,43 @@ function HistoryRow({ entry }: { entry: PromotionHistoryEntry }) {
   );
 }
 
+// The band jump. Both bands are set at the same size — weight and colour
+// mark the one reached, rather than scale. The label sits above the
+// numbers rather than below them: underneath it read as a caption on the
+// pair, which the arrow already covers, so it introduces the line instead.
 function BandJump({ from, to }: { from: number; to: number }) {
   return (
-    <Stack direction="row" alignItems="center" spacing={0.5}>
-      <Chip
-        label={`JB ${from}`}
-        size="small"
-        variant="outlined"
-        sx={{ height: 22, fontSize: 11, fontWeight: 600 }}
-      />
-      <Box sx={{ fontSize: 12, color: "text.disabled" }}>→</Box>
-      <Chip
-        label={`JB ${to}`}
-        size="small"
-        color="primary"
-        variant="outlined"
-        sx={{ height: 22, fontSize: 11, fontWeight: 700, borderWidth: 1.5 }}
-      />
-    </Stack>
+    <Box sx={{ mb: 0.5 }}>
+      <Typography
+        sx={{
+          fontSize: 10,
+          textTransform: "uppercase",
+          letterSpacing: "0.07em",
+          fontWeight: 600,
+          color: "text.disabled",
+        }}
+      >
+        Promoted to
+      </Typography>
+      <Stack direction="row" alignItems="baseline" spacing={0.75}>
+        <Typography
+          sx={{ fontSize: 12.5, color: "text.disabled", fontVariantNumeric: "tabular-nums" }}
+        >
+          JB {from}
+        </Typography>
+        <Box sx={{ fontSize: 11.5, color: "text.disabled" }}>→</Box>
+        <Typography
+          sx={{
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: "primary.main",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          JB {to}
+        </Typography>
+      </Stack>
+    </Box>
   );
 }
 

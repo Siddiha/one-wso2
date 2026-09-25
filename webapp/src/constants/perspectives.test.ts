@@ -54,6 +54,34 @@ describe("PAR's People Ops rail entry", () => {
   });
 });
 
+// RevOps shipped out of preview: its entry is unconditional now, so it must be
+// there with no flags set at all -- which is exactly what production's config
+// looks like.
+describe("the RevOps perspective", () => {
+  it("is present, built and routable with no preview flags set", async () => {
+    const {
+      PERSPECTIVES,
+      FUNCTIONAL_PERSPECTIVES,
+      reachablePerspectives,
+      findPerspectiveByKey,
+      findPerspectiveByPath,
+    } = await load();
+    expect(keys(PERSPECTIVES)).toContain("revops");
+    expect(keys(FUNCTIONAL_PERSPECTIVES)).toContain("revops");
+    expect(keys(reachablePerspectives())).toContain("revops");
+    expect(findPerspectiveByKey("revops")?.path).toBe("/revops");
+    expect(findPerspectiveByPath("/revops")?.key).toBe("revops");
+  });
+
+  it("brings its rail, not just the tile", async () => {
+    // The rail is what a deep link lands beside.
+    const { findPerspectiveByKey } = await load();
+    expect(findPerspectiveByKey("revops")?.sections?.map((section) => section.id)).toContain(
+      "revops-meetings",
+    );
+  });
+});
+
 describe("the UMT perspective", () => {
   it("is absent from the registry when the preview flag is off", async () => {
     const { PERSPECTIVES, FUNCTIONAL_PERSPECTIVES, reachablePerspectives } = await load({
@@ -87,6 +115,18 @@ describe("the UMT perspective", () => {
         expect.arrayContaining(["people", "finance", "legal", "csm", "marketing", "me"]),
       );
     }
+  });
+
+  // usePerspectiveVisibility falls through to sectionAllowed(s.requires, caps)
+  // for any id not in a gate's own set — and umt-products deliberately sets no
+  // `requires`, so that fallback answers "visible to everyone". Dropping this
+  // id from the set would open the admin-only rail entry to every UMT user
+  // with a green suite and no compile error; this fails loudly instead. See
+  // useFinanceGate.test.tsx's "no longer carries the retired approval ids" for
+  // the same shape of guard.
+  it("keeps Product Management in the UMT admin gate set", async () => {
+    const { UMT_ADMIN_ITEM_IDS } = await load({ umt: true });
+    expect(UMT_ADMIN_ITEM_IDS.has("umt-products")).toBe(true);
   });
 });
 

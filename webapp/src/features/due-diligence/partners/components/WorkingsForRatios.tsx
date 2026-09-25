@@ -46,6 +46,15 @@ const YEAR_COLUMN_DEFS = [
 
 type DraftYear = Record<Field, number | "">;
 
+// Ported from the source app's returnCellUSD — deliberately no guard against
+// a zero/blank exchange rate: the source shows the raw division result
+// (Infinity, or NaN for a null rate) rather than hiding or substituting it,
+// and the old app is the reference this preview has to match exactly.
+function usdCellText(raw: number | "", rate: number | ""): string {
+  const value = Math.round((Number(raw) / Number(rate)) * 100) / 100;
+  return `$ ${value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+}
+
 function blankYear(companyId: string, year: number): DraftYear & { companyId: number; year: number } {
   return {
     companyId: Number(companyId),
@@ -246,6 +255,40 @@ export default function WorkingsForRatios({
           </Button>
         </Stack>
       )}
+
+      {currency !== "US Dollar" &&
+        !editable &&
+        checkObjectComplete(years[1]) &&
+        checkObjectComplete(years[2]) &&
+        checkObjectComplete(years[3]) && (
+          <>
+            <Typography sx={{ fontWeight: 600 }}>US Dollar</Typography>
+            <TableContainer sx={{ border: 1, borderColor: "divider" }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: "background.default" }}>
+                  <TableRow>
+                    <TableCell>Items</TableCell>
+                    <TableCell>Currency</TableCell>
+                    {YEAR_COLUMN_DEFS.map(({ col, label }) => (
+                      <TableCell key={col}>{label}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {ROWS.map(({ label, field }) => (
+                    <TableRow key={field}>
+                      <TableCell>{label}</TableCell>
+                      <TableCell>USD</TableCell>
+                      <TableCell>{usdCellText(years[1][field], years[1].exchangeRate)}</TableCell>
+                      <TableCell>{usdCellText(years[2][field], years[2].exchangeRate)}</TableCell>
+                      <TableCell>{usdCellText(years[3][field], years[3].exchangeRate)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )}
     </Stack>
   );
 }

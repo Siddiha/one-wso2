@@ -40,7 +40,22 @@ export const FIELD_LABELS: Record<string, string> = {
   action_steps: "action steps",
   progress: "progress",
   remarks: "remarks",
+  assigner_id: "risk assigned to",
+  owner_id: "risk owner",
+  management_approver_id: "management approver",
+  assignment_team_id: "assignment team",
+  action_owner_id: "action owner",
 };
+
+// Fields whose history values are internal user/team ids. An id means nothing
+// to a reader, so these changes render by name only ("Changed risk owner").
+const ID_VALUED_FIELDS = new Set([
+  "assigner_id",
+  "owner_id",
+  "management_approver_id",
+  "assignment_team_id",
+  "action_owner_id",
+]);
 
 export function fieldLabel(field: string): string {
   return FIELD_LABELS[field] ?? field.replace(/_/g, " ");
@@ -56,6 +71,12 @@ export function readValue(raw: string | null): string {
   } catch {
     return raw;
   }
+}
+
+// changedValue is readValue for one side of a field diff, blank for the fields
+// whose values are ids (see ID_VALUED_FIELDS) so the diff renders by name only.
+export function changedValue(field: string, raw: string | null): string {
+  return ID_VALUED_FIELDS.has(field) ? "" : readValue(raw);
 }
 
 export const STATUS_CONFIG: Record<string, StatusCfg> = {

@@ -150,6 +150,28 @@ export const PERSPECTIVE_HUES: Record<string, PerspectiveHue> = {
     light: { bg: "#EFF6E6", fg: "#426A16" },
     dark: { bg: "#20281A", fg: "#8ABF42" },
   },
+
+  // RevOps. Orchid at 301 degrees, and the ninth hue — see the cap note in
+  // perspectiveHues.test.ts for why a ninth exists at all.
+  //
+  // It is NOT the green it was originally given (#678F3D, 89 degrees). Upstream
+  // added umt at 85.7 degrees while this was in flight, putting the two 3.6
+  // degrees apart: the same green twice, and neither findable by colour. The
+  // wheel's two remaining openings were 124 (between umt and finance) and 301
+  // (between csm and marketing). 124 is wider — 38 degrees of clearance against
+  // 32 — but it is a third green in a palette that already has umt's olive and
+  // finance's teal, so the extra degrees buy nothing a user can act on. 301 is
+  // 32.6 from csm and 31.4 from marketing, both comfortably past the palette's
+  // existing tightest pair (people and legal, 17.7 apart).
+  //
+  // Saturation and lightness deliberately copy csm's (0.68/0.58): this sits in
+  // the same violet-pink quadrant, so matching its weight keeps it reading as a
+  // sibling rather than a louder cousin. Measured 4.49:1 light and 4.29:1 dark.
+  revops: {
+    hue: "#DD4BDA",
+    light: { bg: "#FAE6FA", fg: "#AC3BAA" },
+    dark: { bg: "#352135", fg: "#DD4BDA" },
+  },
 };
 
 export function perspectiveHue(key: string): PerspectiveHue | undefined {

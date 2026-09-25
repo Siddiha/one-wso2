@@ -18,13 +18,18 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
-  Button,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Stack,
+  Tooltip,
+  Typography,
 } from "@wso2/oxygen-ui";
+import { DownloadIcon, TrashIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
+import { useNotifications } from "@context/notifications/NotificationsContext";
 import { describeError } from "../util/financeError";
 import type { ReceiptSource } from "../util/financeReceipts";
 
@@ -37,14 +42,39 @@ export function ReceiptViewer({
   title = "Receipt",
   load,
   onClose,
+  onRemove,
 }: {
   title?: string;
   load: (() => Promise<ReceiptSource>) | null;
   onClose: () => void;
+  /**
+   * AttachmentButton.tsx:467-477 — the source's own viewer offers Remove
+   * beside Download rather than making it a separate control back on the
+   * form, and only when the caller is allowed to correct the row at all
+   * (`!disableEdit`). Omitted entirely, not merely hidden, when the caller
+   * has nothing to offer here — a read-only view of someone else's
+   * submission, say.
+   */
+  onRemove?: () => Promise<void>;
 }) {
+  const { showError } = useNotifications();
   const [source, setSource] = useState<ReceiptSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const remove = async () => {
+    if (!onRemove) return;
+    setRemoving(true);
+    try {
+      await onRemove();
+      onClose();
+    } catch (err) {
+      showError(describeError(err));
+    } finally {
+      setRemoving(false);
+    }
+  };
 
   useEffect(() => {
     if (!load) return;
@@ -80,7 +110,14 @@ export function ReceiptViewer({
 
   return (
     <Dialog open={!!load} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>{title}</DialogTitle>
+      <DialogTitle sx={{ p: 0 }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 3, py: 2 }}>
+          <Typography sx={{ fontSize: 16, fontWeight: 700, flex: 1 }}>{title}</Typography>
+          <IconButton size="small" onClick={onClose} disabled={removing} aria-label="Close">
+            <XIcon size={18} />
+          </IconButton>
+        </Stack>
+      </DialogTitle>
       <DialogContent dividers sx={{ minHeight: 320 }}>
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 280 }}>
@@ -121,19 +158,33 @@ export function ReceiptViewer({
           // Download rather than navigate: a top-level blob:/data: navigation
           // of a non-previewable (e.g. HTML) payload would run in the app
           // origin. `download` forces a save instead.
-          <Button
-            size="small"
-            component="a"
-            href={source.url}
-            download={previewable ? title : `${title}.download`}
-            sx={{ textTransform: "none" }}
-          >
-            Download
-          </Button>
+          <Tooltip title="Download" arrow>
+            <IconButton
+              size="small"
+              component="a"
+              href={source.url}
+              download={previewable ? title : `${title}.download`}
+              aria-label="Download"
+            >
+              <DownloadIcon size={18} />
+            </IconButton>
+          </Tooltip>
         )}
-        <Button size="small" onClick={onClose}>
-          Close
-        </Button>
+        {onRemove && source && (
+          <Tooltip title={removing ? "Removing…" : "Remove"} arrow>
+            <span>
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => void remove()}
+                disabled={removing}
+                aria-label="Remove"
+              >
+                {removing ? <CircularProgress size={16} color="error" /> : <TrashIcon size={18} />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
       </DialogActions>
     </Dialog>
   );

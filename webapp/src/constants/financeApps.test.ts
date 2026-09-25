@@ -19,22 +19,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The expense app is behind a preview flag, so the registry is no longer a
- * constant — it depends on `window.config`. Everything here therefore imports
- * it fresh per state rather than at the top of the file.
+ * `umt`/`infra` elsewhere still gate on `window.config`, so tests across this
+ * area import fresh per state rather than at the top of the file. Nothing
+ * left in this particular registry reads the flag anymore, but the helper
+ * costs nothing to keep.
  */
 type FinanceApps = typeof import("./financeApps");
 
-async function load(
-  preview: {
-    financeOverview?: boolean;
-  } = {},
-): Promise<FinanceApps> {
+async function load(): Promise<FinanceApps> {
   vi.resetModules();
-  window.config = {
-    ...(window.config ?? {}),
-    ONE_WSO2_PREVIEW_FEATURES: preview,
-  } as Window["config"];
   return import("./financeApps");
 }
 
@@ -63,9 +56,7 @@ describe("where each finance app lives", () => {
   // and expense/approvals. Retired item by item as each moved elsewhere, until
   // nothing was left of the group itself.
   it("keeps claims with the person, and the card with finance", async () => {
-    const { ME_FINANCE_APPS, FINANCE_OVERVIEW_APPS, FINANCE_PERSPECTIVE_APPS } = await load({
-      financeOverview: true,
-    });
+    const { ME_FINANCE_APPS, FINANCE_OVERVIEW_APPS, FINANCE_PERSPECTIVE_APPS } = await load();
     expect(keys(ME_FINANCE_APPS)).toEqual(["claims"]);
     expect(keys(FINANCE_PERSPECTIVE_APPS)).toEqual(["cc"]);
     // Reading how the allowance is spent is a different job from filing or
@@ -93,7 +84,7 @@ describe("where each finance app lives", () => {
 
   it("puts every app KEY in exactly one of the two", async () => {
     const { FINANCE_APPS, ME_FINANCE_APPS, FINANCE_OVERVIEW_APPS, FINANCE_PERSPECTIVE_APPS } =
-      await load({ financeOverview: true });
+      await load();
     const financeSide = [...keys(FINANCE_OVERVIEW_APPS), ...keys(FINANCE_PERSPECTIVE_APPS)];
     const overlap = keys(ME_FINANCE_APPS).filter((k) => financeSide.includes(k));
     expect(overlap).toEqual([]);
@@ -136,18 +127,13 @@ describe("where each finance app lives", () => {
   });
 });
 
-// Finance Overview is new ground — a Credit Card Expenses dashboard moved out
-// of its own app, and an OPD Claims dashboard — and has not run against a
-// real account yet. The whole group is held back, not the items inside it.
-describe("the Finance Overview preview flag", () => {
-  it("hides the group when the flag is off", async () => {
+// Finance Overview shipped out of preview — a Credit Card Expenses dashboard
+// moved out of its own app, and an OPD Claims dashboard. The group is always
+// present now, no flag involved.
+describe("the Finance Overview group", () => {
+  it("is always present", async () => {
     const { FINANCE_OVERVIEW_APPS, FINANCE_APPS } = await load();
-    expect(keys(FINANCE_OVERVIEW_APPS)).toEqual([]);
-    expect(keys(FINANCE_APPS)).not.toContain("finance-overview");
-  });
-
-  it("shows it when the flag is on", async () => {
-    const { FINANCE_OVERVIEW_APPS } = await load({ financeOverview: true });
     expect(keys(FINANCE_OVERVIEW_APPS)).toEqual(["finance-overview"]);
+    expect(keys(FINANCE_APPS)).toContain("finance-overview");
   });
 });

@@ -78,6 +78,7 @@ import {
   rejectRisk,
   resubmitRisk,
   updateRisk,
+  updateRiskAssignees,
 } from "../api/riskApi";
 import type {
   ComplianceReference,
@@ -87,6 +88,7 @@ import type {
   RiskListItem,
   RiskScore,
   RiskTeam,
+  UpdateAssigneesPayload,
   UpdateRiskPayload,
   UserOption,
 } from "../api/riskApi";
@@ -98,6 +100,7 @@ import type { ActionPlanWithSteps } from "./risk-registers/RiskDetailDrawer";
 import RejectDialog from "./risk-registers/RejectDialog";
 import ReassessmentDialog from "./risk-registers/ReassessmentDialog";
 import EditRiskDialog from "./risk-registers/EditRiskDialog";
+import UpdateAssigneesDialog from "./risk-registers/UpdateAssigneesDialog";
 import ActionPlanDialog from "./risk-registers/ActionPlanDialog";
 import type { ActionPlanPayload } from "./risk-registers/ActionPlanDialog";
 import EscalationCommentDialog from "./risk-registers/EscalationCommentDialog";
@@ -413,6 +416,7 @@ export default function RiskRegisters(): JSX.Element {
   const [actionPlansError, setActionPlansError] = useState("");
 
   const [editDetail, setEditDetail] = useState<RiskDetail | null>(null);
+  const [assigneesDetail, setAssigneesDetail] = useState<RiskDetail | null>(null);
   const [assessOpen, setAssessOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -789,6 +793,7 @@ export default function RiskRegisters(): JSX.Element {
       ),
 
     onEdit: () => setEditDetail(drawerDetail),
+    onUpdateAssignees: () => setAssigneesDetail(drawerDetail),
     onAssess: () => setAssessOpen(true),
     onCancel: () => setCancelConfirmOpen(true),
     onAddActionPlan: () => setActionPlanOpen(true),
@@ -895,6 +900,18 @@ export default function RiskRegisters(): JSX.Element {
       );
       closeDrawer();
     }
+  };
+
+  // A correction never moves the workflow, so the risk stays where it is: reopen
+  // the drawer on it to show the new names rather than closing it like Edit.
+  const handleAssigneesSave = async (payload: UpdateAssigneesPayload) => {
+    if (!assigneesDetail) return;
+    const savedId = assigneesDetail.id;
+    await updateRiskAssignees(authFetch, savedId, payload);
+    setAssigneesDetail(null);
+    setActionSuccess("Assignees updated.");
+    loadRisks();
+    openDrawer(savedId);
   };
 
   const handleAssessSubmit = async (payload: Parameters<typeof createAssessment>[2]) => {
@@ -1264,6 +1281,17 @@ export default function RiskRegisters(): JSX.Element {
           />
         );
       })()}
+
+      {assigneesDetail && (
+        <UpdateAssigneesDialog
+          open
+          detail={assigneesDetail}
+          assignmentTeams={assignmentTeams}
+          users={users}
+          onClose={() => setAssigneesDetail(null)}
+          onSave={handleAssigneesSave}
+        />
+      )}
 
       <Dialog open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Cancel Risk</DialogTitle>

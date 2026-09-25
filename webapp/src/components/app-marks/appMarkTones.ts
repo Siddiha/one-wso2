@@ -73,6 +73,10 @@ export const APP_MARK_TONES: Record<string, AppMarkTones> = {
   // recomputes every ratio, so these are asserted rather than trusted.
   security: { field: "#DCC285", lead: "#B8860B", detail: "#976E09" },
   umt: { field: "#AFC78F", lead: "#5F8F1F", detail: "#4E7519" },
+  // RevOps. Derived from its hue by this file's own rule — field is the hue 50%
+  // toward white, detail the hue at 82%. Measured 3.45:1 and 5.07:1 for lead,
+  // 4.88:1 and 3.58:1 for detail, against the light and dark tiles.
+  revops: { field: "#EEA5EC", lead: "#DD4BDA", detail: "#B53EB3" },
 };
 
 /**

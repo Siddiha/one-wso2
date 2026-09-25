@@ -343,14 +343,15 @@ function NewTxnBody() {
                 disabled={submitDisabled}
                 sx={{ fontWeight: 600, minWidth: 120 }}
               >
-                {submit.isPending ? "Submitting…" : "Submit"}
-                {completeChecked.length > 0 && (
-                  <Chip
-                    label={completeChecked.length}
-                    size="small"
-                    sx={{ ml: 0.75, height: 18, fontSize: 10.5, bgcolor: "common.white" }}
-                  />
-                )}
+                {/* A Chip badge here used to carry its own hardcoded white
+                    background, which the disabled button's own muted colours
+                    could wash out to the point the count was unreadable. Plain
+                    text in the label, the way CcApproveBody's own "Approve N"
+                    button does it, always inherits the button's own
+                    (enabled or disabled) text colour correctly. */}
+                {submit.isPending
+                  ? "Submitting…"
+                  : `Submit ${completeChecked.length || ""}`.trim()}
               </Button>
             </span>
           </Tooltip>

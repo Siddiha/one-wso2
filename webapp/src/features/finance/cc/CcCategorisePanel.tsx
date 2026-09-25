@@ -33,6 +33,7 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { useAccessToken } from "@hooks/useAccessToken";
+import { useNotifications } from "@context/notifications/NotificationsContext";
 import { ccServiceUrls } from "@config/apiConfig";
 import { ReceiptViewer } from "../components/ReceiptViewer";
 import { DraftStatusChip } from "../components/DraftStatusChip";
@@ -46,12 +47,14 @@ import {
   FieldLabel,
   FieldRow,
   FundingSources,
+  JobNumberAutocomplete,
   Placeholder,
   ReadOnlyField,
 } from "./ccFormFields";
 import { clearDependentFields, resolveProductUnitIndex } from "./ccPendingSubmissions";
 import { useCcJobNumberDetails, useCcMenus } from "./useCc";
 import { useCcAttachment } from "./useCcMutations";
+import { CC_SNACK } from "./ccCopy";
 import {
   CC_MARKETING_CATEGORY,
   CC_TRAVEL_CATEGORY,
@@ -136,6 +139,7 @@ export function CcCategorisePanel({
   const menus = useCcMenus();
   const attachment = useCcAttachment();
   const getAccessToken = useAccessToken();
+  const { showSuccess } = useNotifications();
 
   const [draft, setDraft] = useState<CcTransaction>(txn);
   // The last state known to be on the server. Seeded from the row this panel
@@ -145,6 +149,10 @@ export function CcCategorisePanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [load, setLoad] = useState<(() => Promise<ReceiptSource>) | null>(null);
+  // Which attachment the viewer is open on — needed alongside `load` so the
+  // viewer's own Remove button (AttachmentButton.tsx:467-477) can be wired to
+  // the right one.
+  const [viewingType, setViewingType] = useState<CcAttachmentType | null>(null);
   const [fundingOpen, setFundingOpen] = useState(false);
   // `review` opens read-only whatever the caller says, and only the Edit button
   // moves it — `EditPane.tsx:322-328` ignores the `editMode` prop entirely once
@@ -345,6 +353,7 @@ export function CcCategorisePanel({
   );
 
   const viewAttachment = (attachmentType: CcAttachmentType) => {
+    setViewingType(attachmentType);
     // A loader, not a loaded source: ReceiptViewer fetches when it opens.
     // fetchBase64Attachment, not fetchReceiptObjectUrl — this endpoint returns
     // base64, not bytes.
@@ -367,24 +376,35 @@ export function CcCategorisePanel({
           description available on hover when it is too long to show. */}
       <Box sx={{ bgcolor: "action.hover", borderRadius: 1.5, p: 1.5 }}>
         <Stack direction="row" alignItems="flex-start" spacing={1.5}>
-          <Typography
-            title={draft.txnDescription ?? ""}
-            sx={{ fontSize: 15, fontWeight: 700, flex: 1, lineHeight: 1.35 }}
-          >
-            {txn.id} - {draft.txnDescription}
-          </Typography>
+          {/* A proper Tooltip, not the native `title` attribute — the
+              browser's own tooltip is slow to appear and styled outside the
+              app entirely. */}
+          <Tooltip describeChild title={draft.txnDescription ?? ""} arrow>
+            <Typography
+              sx={{ fontSize: 15, fontWeight: 700, flex: 1, lineHeight: 1.35 }}
+            >
+              {txn.id} - {draft.txnDescription}
+            </Typography>
+          </Tooltip>
           <Typography sx={{ fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
             ${bareAmount(draft.txnAmount)}
           </Typography>
         </Stack>
         {/* :909-936 — the lead rides inline only while the row is still a draft;
             once it has been submitted that same slot becomes the submission
-            trail, because by then there is more to say than one name. */}
+            trail, because by then there is more to say than one name.
+
+            The autosave chip lives on this same line, not a line of its own —
+            this row already reserves the right-hand slot via
+            `justifyContent="space-between"`, so the chip appearing or
+            disappearing as the draft state changes never adds or removes a
+            row, and the gap under the title stays fixed. */}
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
           <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>
             Date: {formatNice(draft.txnDate)}
             {!review && draft.leadEmail && ` | Lead Approver: ${draft.leadEmail.split(",")[0]}`}
           </Typography>
+          {!review && <DraftStatusChip state={draftState} />}
         </Stack>
         {review && <CcSubmissionDetails txn={txn} />}
       </Box>
@@ -436,20 +456,16 @@ export function CcCategorisePanel({
               <AttachmentField
                 label="Receipt"
                 fileName={draft.receiptFileName}
-                busy={false}
                 viewOnly
                 onView={() => viewAttachment("receipt")}
                 onPick={async () => {}}
-                onRemove={async () => {}}
               />
               <AttachmentField
                 label="Contract"
                 fileName={draft.contractFileName}
-                busy={false}
                 viewOnly
                 onView={() => viewAttachment("contract")}
                 onPick={async () => {}}
-                onRemove={async () => {}}
               />
             </FieldRow>
           </>
@@ -526,24 +542,12 @@ export function CcCategorisePanel({
 
         {isTravel ? (
           <Field label="Travel Job Number" required>
-            <Select
-              value={draft.travelJobNumber ?? ""}
+            <JobNumberAutocomplete
+              value={draft.travelJobNumber}
+              options={jobNumbers}
               disabled={!editable}
-              onChange={(e) =>
-                change(
-                  { travelJobNumber: String(e.target.value) || null },
-                  clearDependentFields("travelJobNumber"),
-                )
-              }
-              displayEmpty
-              renderValue={(v) => (v ? String(v) : <Placeholder />)}
-            >
-              {jobNumbers.map((j) => (
-                <MenuItem key={j} value={j}>
-                  {j}
-                </MenuItem>
-              ))}
-            </Select>
+              onChange={(v) => change({ travelJobNumber: v }, clearDependentFields("travelJobNumber"))}
+            />
             {/* :568-598 warns on both, because either one leaves the row short
                 of what finance needs and neither is the reader's fault. */}
             {jobDetails.isError && (
@@ -653,31 +657,30 @@ export function CcCategorisePanel({
           <AttachmentField
             label="Receipt"
             fileName={draft.receiptFileName}
-            busy={attachment.upload.isPending}
             disabled={!editable}
             onView={() => viewAttachment("receipt")}
             onPick={async (file) => {
               const name = await attachment.upload.mutateAsync({ id: txn.id, attachmentType: "receipt", file });
-              change({ receiptFileName: name || file.name });
-            }}
-            onRemove={async () => {
-              await attachment.remove.mutateAsync({ id: txn.id, attachmentType: "receipt" });
-              change({ receiptFileName: null });
+
+              // The server already has this file: written to baseline too, not
+              // just draft, so Discard afterwards can't revert past it.
+              const patch = { receiptFileName: name || file.name };
+              change(patch);
+              setBaseline((b) => ({ ...b, ...patch }));
             }}
           />
           <AttachmentField
             label="Contract"
             fileName={draft.contractFileName}
-            busy={attachment.upload.isPending}
             disabled={!editable}
             onView={() => viewAttachment("contract")}
             onPick={async (file) => {
               const name = await attachment.upload.mutateAsync({ id: txn.id, attachmentType: "contract", file });
-              change({ contractFileName: name || file.name });
-            }}
-            onRemove={async () => {
-              await attachment.remove.mutateAsync({ id: txn.id, attachmentType: "contract" });
-              change({ contractFileName: null });
+              // The server already has this file: written to baseline too, not
+              // just draft, so Discard afterwards can't revert past it.
+              const patch = { contractFileName: name || file.name };
+              change(patch);
+              setBaseline((b) => ({ ...b, ...patch }));
             }}
           />
         </FieldRow>
@@ -690,23 +693,17 @@ export function CcCategorisePanel({
           </Alert>
         )}
 
-        {/* EditPane.tsx:1522-1605 — the autosave state on the left, Save on the
-            right, so the reader can see part-finished work is being kept.
-            `mt: auto` is what holds it against the bottom of the panel. */}
+        {/* EditPane.tsx:1522-1605 — Save held against the bottom of the panel
+            by `mt: auto`. The autosave status used to sit here too; it now
+            rides with the amount at the top instead, since that is the row
+            it is actually reporting on. */}
         <Stack
           direction="row"
           alignItems="center"
-          justifyContent="space-between"
+          justifyContent="flex-end"
           spacing={1.5}
           sx={{ mt: "auto", pt: 1.5 }}
         >
-          {/* Wrapped, because the chip renders nothing while idle and a bare
-              null would let `space-between` slide Save over to the left. */}
-          <Box>
-            {/* Never in review mode: nothing is autosaved there, so a chip
-                reporting on it would be reporting on nothing. */}
-            {!review && <DraftStatusChip state={draftState} />}
-          </Box>
           <Stack direction="row" spacing={1} alignItems="center">
             {/* :1547-1585 — Edit only while clean, because once there are edits
                 the way out is Discard or Save, not a toggle that would leave it
@@ -787,7 +784,29 @@ export function CcCategorisePanel({
         </DialogActions>
       </Dialog>
 
-      <ReceiptViewer title="Attachment" load={load} onClose={() => setLoad(null)} />
+      <ReceiptViewer
+        title="Attachment"
+        load={load}
+        onClose={() => {
+          setLoad(null);
+          setViewingType(null);
+        }}
+        // AttachmentButton.tsx:467-477 — Remove lives in the viewer, not back
+        // on the form, and only when the row is actually open for correction.
+        onRemove={
+          editable && viewingType
+            ? async () => {
+                await attachment.remove.mutateAsync({ id: txn.id, attachmentType: viewingType });
+                // The server has already dropped this file: written to baseline
+                // too, not just draft, so Discard afterwards can't bring it back.
+                const patch = viewingType === "receipt" ? { receiptFileName: null } : { contractFileName: null };
+                change(patch);
+                setBaseline((b) => ({ ...b, ...patch }));
+                showSuccess(CC_SNACK.success.removeAttachment);
+              }
+            : undefined
+        }
+      />
     </Box>
   );
 }

@@ -17,7 +17,7 @@
 import { Box, Stack, Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { HistoryEntry } from "../../api/riskApi";
-import { STATUS_CONFIG, fieldLabel, formatDate, readValue } from "./utils";
+import { STATUS_CONFIG, changedValue, fieldLabel, formatDate } from "./utils";
 
 // Tone drives the dot colour only — the sentence carries the meaning, so a
 // missing tone degrades to neutral rather than hiding the entry.
@@ -94,8 +94,8 @@ function entryToSentence(e: HistoryEntry): Rendered {
       return { title: "Risk cancelled", tone: "neutral" };
     case "UPDATE": {
       if (!e.field_changed) return { title: "Risk updated", tone: "neutral" };
-      const from = readValue(e.old_value);
-      const to = readValue(e.new_value);
+      const from = changedValue(e.field_changed, e.old_value);
+      const to = changedValue(e.field_changed, e.new_value);
       return {
         title: `Changed ${fieldLabel(e.field_changed)}`,
         // action_steps records no before/after — the steps are rows, not a

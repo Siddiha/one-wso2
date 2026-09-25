@@ -20,6 +20,7 @@ import {
   PAR_LEAD_PORTAL_ITEM_ID,
   SRI_LANKA_ONLY_ITEM_IDS,
   SUBSCRIPTION_ITEM_IDS,
+  UMT_ADMIN_ITEM_IDS,
   type PerspectiveSection,
 } from "@constants/perspectives";
 import { capabilitiesFromPrivileges, type Capability } from "@constants/appMenu";
@@ -39,6 +40,7 @@ import { useSecurityGate } from "@features/security/api/useSecurityGate";
 import { useSubscriptionGate } from "@features/subscriptions/api/useSubscriptionGate";
 import { useParCanSeeLeadPortal } from "@features/par/api/useParData";
 import { useParIsAdmin } from "@features/par/api/useParIsAdmin";
+import { useUmtGate } from "@features/umt/api/useUmtGate";
 import { isSriLankaWorkLocation } from "@utils/locationGate";
 import { visibleLeavesOf } from "./railActive";
 
@@ -164,6 +166,13 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   // every gate above there's no per-perspective fetch to avoid by disabling it.
   const parAdminPortalGate = useParIsAdmin();
 
+  // UMT is the same shape of problem again: Product Management is
+  // UMT_ADMIN-only, decided by UMT's own /update/user-info roles, which bear
+  // no relation to the people-app privilege numbers `caps` is built from.
+  // Only fetched while UMT is the active perspective.
+  const isUmt = active.key === "umt";
+  const umtGate = useUmtGate(isUmt);
+
   // Both services are a Colombo-office perk, so both screens are Sri-Lanka-only
   // — see isSriLankaWorkLocation. They now sit in different perspectives (self
   // service under Me, manage-on-behalf under People Ops), which is why the ids
@@ -205,6 +214,7 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
     if (SUBSCRIPTION_ITEM_IDS.has(s.id)) return subscriptionCanSee(s.id);
     if (s.id === PAR_LEAD_PORTAL_ITEM_ID) return parLeadPortalGate.canSee;
     if (s.id === PAR_ADMIN_PORTAL_ITEM_ID) return parAdminPortalGate.isAdmin;
+    if (UMT_ADMIN_ITEM_IDS.has(s.id)) return umtGate.isAdmin && !umtGate.isResolving;
     if (isMarketingOps) return marketingOpsGate.canSee(s.id);
     if (INFRA_ITEM_IDS.has(s.id)) return infraGate.canSee(s.id);
     return sectionAllowed(s.requires, caps);
@@ -230,7 +240,8 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
     subscriptionGate.isResolving ||
     infraGate.isResolving ||
     parLeadPortalGate.isLoading ||
-    parAdminPortalGate.isLoading;
+    parAdminPortalGate.isLoading ||
+    umtGate.isResolving;
 
   const isError =
     userInfo.isError ||

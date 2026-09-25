@@ -25,6 +25,16 @@ import type { CcTransaction } from "./ccTypes";
 vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "token" }));
 vi.mock("@asgardeo/react", () => ({ useAsgardeo: () => ({ isSignedIn: true }) }));
 
+// The real viewer fetches the file over the network before it ever shows
+// Remove — irrelevant here and untestable without a live backend. This file
+// only owns "does CcEditDialog wire onRemove correctly", so a stand-in
+// renders Remove the moment `load` is set, the way the real one does once its
+// fetch resolves.
+vi.mock("../components/ReceiptViewer", () => ({
+  ReceiptViewer: ({ load, onRemove }: { load: unknown; onRemove?: () => Promise<void> }) =>
+    load && onRemove ? <button onClick={() => void onRemove()}>Remove</button> : null,
+}));
+
 // First tests for the cc-expenses port. The audit's largest finding was that
 // GET /travels/{jobNumber} did not exist here at all — so a travel transaction
 // had no way to obtain the product and business unit the backend files it
@@ -222,19 +232,26 @@ describe("marketing sub-categories still need a sub-region", () => {
 describe("removing an attachment", () => {
   it("is not offered when nothing is attached", async () => {
     show({ ...txn, receiptFileName: null, contractFileName: null });
-    await screen.findByText("Receipt");
+    // Nothing attached: the icon opens the file picker, not the viewer, so
+    // Remove can never be reached at all.
+    fireEvent.click(await screen.findByRole("button", { name: "Attach Receipt" }));
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
   });
 
   it("is offered once something is", async () => {
     show({ ...txn, receiptFileName: "r.pdf" });
-    expect(await screen.findByRole("button", { name: "Remove" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "View Receipt" }));
+    // The mocked viewer isn't a real Dialog, so MUI marks it aria-hidden as a
+    // "sibling" of the edit form's own open Dialog — `hidden: true` is
+    // Testing Library's standard escape hatch for exactly this.
+    expect(await screen.findByRole("button", { name: "Remove", hidden: true })).toBeInTheDocument();
   });
 
   it("deletes the slot it belongs to, and says so", async () => {
     removed.mockClear();
     show({ ...txn, receiptFileName: "r.pdf" });
-    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    fireEvent.click(await screen.findByRole("button", { name: "View Receipt" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove", hidden: true }));
 
     await waitFor(() => expect(removed).toHaveBeenCalledTimes(1));
     expect(removed).toHaveBeenCalledWith({ id: txn.id, attachmentType: "receipt" });

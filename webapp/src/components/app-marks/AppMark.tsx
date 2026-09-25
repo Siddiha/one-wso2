@@ -178,6 +178,35 @@ export function MarketingMark({ size }: MarkProps) {
   );
 }
 
+/**
+ * RevOps — a rising bar chart with an arrow above its tallest column.
+ *
+ * Chosen over a handshake (too much fine detail to survive 48px) and a target
+ * (CSM is already a ring form, and two ring marks in one launcher is exactly the
+ * collision the hues exist to avoid). Bars give it a silhouette nothing else here
+ * has: flat-topped verticals against a house, two figures, a wallet, a megaphone
+ * and a buoy.
+ *
+ * The only mark that uses all three tones as three separate shapes — the two
+ * shorter bars recede as `field`, the tallest carries `lead`, and the arrowhead
+ * is `detail`. Growth reads from the step up in height, so the tallest bar is the
+ * one that should be saturated.
+ *
+ * Bars sit on a common baseline at y=41 and are 8 wide on a 12 pitch, so the
+ * rhythm is even; the arrowhead clears the tallest bar's cap by 2.
+ */
+export function RevOpsMark({ size }: MarkProps) {
+  const t = appMarkTones("revops")!;
+  return (
+    <Svg size={size}>
+      <rect x="7" y="27" width="8" height="14" rx="2" fill={t.field} />
+      <rect x="19" y="21" width="8" height="20" rx="2" fill={t.field} />
+      <rect x="31" y="13" width="8" height="28" rx="2" fill={t.lead} />
+      <path d="M35 3l6 8H29z" fill={t.detail} />
+    </Svg>
+  );
+}
+
 /** CSM — a life buoy: ring plus four spokes. */
 export function CsmMark({ size }: MarkProps) {
   const t = appMarkTones("csm")!;

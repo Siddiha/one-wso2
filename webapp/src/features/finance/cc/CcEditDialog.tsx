@@ -19,11 +19,13 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
+  IconButton,
   MenuItem,
   Select,
   Table,
@@ -36,14 +38,24 @@ import {
   Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { CheckIcon } from "@wso2/oxygen-ui-icons-react";
+import { CirclePlusIcon, FileIcon } from "@wso2/oxygen-ui-icons-react";
 import { useNotifications } from "@context/notifications/NotificationsContext";
+import { useAccessToken } from "@hooks/useAccessToken";
+import { ccServiceUrls } from "@config/apiConfig";
+import { ReceiptViewer } from "../components/ReceiptViewer";
 import { describeError } from "../util/financeError";
 import { CC_SNACK } from "./ccCopy";
 import { money, formatNice } from "../util/financeFormat";
-import { CC_ATTACHMENT_ACCEPT, CC_ATTACHMENT_MAX_BYTES, maxSizeLabel } from "../util/financeReceipts";
+import {
+  CC_ATTACHMENT_ACCEPT,
+  CC_ATTACHMENT_MAX_BYTES,
+  fetchBase64Attachment,
+  maxSizeLabel,
+  type ReceiptSource,
+} from "../util/financeReceipts";
 import { useCcJobNumberDetails, useCcMenus } from "./useCc";
 import { useCcAttachment } from "./useCcMutations";
+import { JobNumberAutocomplete } from "./ccFormFields";
 import { CcFundingSource,
   CC_MARKETING_CATEGORY,
   CC_TRAVEL_CATEGORY,
@@ -116,6 +128,22 @@ function CcEditForm({
   // chosen. Kept verbatim: the backend routes to whoever is named here.
   const [leadEmail, setLeadEmail] = useState(txn.leadEmail?.split(",")[0]?.trim() ?? "");
   const attachment = useCcAttachment();
+  const getAccessToken = useAccessToken();
+  const [load, setLoad] = useState<(() => Promise<ReceiptSource>) | null>(null);
+  // Which attachment the viewer is open on — needed alongside `load` so the
+  // viewer's own Remove button (AttachmentButton.tsx:467-477) can be wired to
+  // the right one.
+  const [viewingType, setViewingType] = useState<"receipt" | "contract" | null>(null);
+
+  const viewAttachment = (attachmentType: "receipt" | "contract") => {
+    setViewingType(attachmentType);
+    // A loader, not a loaded source: ReceiptViewer fetches when it opens.
+    // fetchBase64Attachment, not fetchReceiptObjectUrl — this endpoint
+    // returns base64, not bytes.
+    setLoad(() => async () =>
+      fetchBase64Attachment(ccServiceUrls.attachment(txn.id, attachmentType), await getAccessToken()),
+    );
+  };
 
   /**
    * Finance, looking at a transaction that has not reached it yet.
@@ -226,6 +254,7 @@ function CcEditForm({
     : ccTxnComplete(patched) && !jobUnusable;
 
   return (
+    <>
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ fontSize: 17, fontWeight: 700 }}>
         Categorise transaction
@@ -273,19 +302,12 @@ function CcEditForm({
 
           {isTravel ? (
             <Field label="Travel job number">
-              <Select
+              <JobNumberAutocomplete
                 value={jobNumber}
+                options={jobNumbers}
                 disabled={leadOnly}
-                onChange={(e) => setJobNumber(String(e.target.value))}
-                displayEmpty
-                renderValue={(v) => (v ? String(v) : <Placeholder />)}
-              >
-                {jobNumbers.map((j) => (
-                  <MenuItem key={j} value={j}>
-                    {j}
-                  </MenuItem>
-                ))}
-              </Select>
+                onChange={(v) => setJobNumber(v ?? "")}
+              />
             {/* EditPane.tsx:568-598 warns on both, because either one leaves
                 the row uncompletable and neither is the user's fault. */}
             {jobUnusable && (
@@ -386,31 +408,21 @@ function CcEditForm({
             <AttachmentField
               label="Receipt"
               fileName={receiptFileName}
-              busy={attachment.upload.isPending}
               viewOnly={leadOnly}
+              onView={() => viewAttachment("receipt")}
               onPick={async (file) => {
                 const name = await attachment.upload.mutateAsync({ id: txn.id, attachmentType: "receipt", file });
                 setReceiptFileName(name || file.name);
-                showSuccess(CC_SNACK.success.uploadAttachment);
-              }}
-              onRemove={async () => {
-                await attachment.remove.mutateAsync({ id: txn.id, attachmentType: "receipt" });
-                setReceiptFileName(null);
               }}
             />
             <AttachmentField
               label="Contract (optional)"
               fileName={contractFileName}
-              busy={attachment.upload.isPending}
               viewOnly={leadOnly}
+              onView={() => viewAttachment("contract")}
               onPick={async (file) => {
                 const name = await attachment.upload.mutateAsync({ id: txn.id, attachmentType: "contract", file });
                 setContractFileName(name || file.name);
-                showSuccess(CC_SNACK.success.uploadAttachment);
-              }}
-              onRemove={async () => {
-                await attachment.remove.mutateAsync({ id: txn.id, attachmentType: "contract" });
-                setContractFileName(null);
               }}
             />
           </Box>
@@ -433,6 +445,27 @@ function CcEditForm({
         </Tooltip>
       </DialogActions>
     </Dialog>
+    <ReceiptViewer
+      title="Attachment"
+      load={load}
+      onClose={() => {
+        setLoad(null);
+        setViewingType(null);
+      }}
+      // AttachmentButton.tsx:467-477 — Remove lives in the viewer, not back
+      // on the form, and only while the row is actually open to correction.
+      onRemove={
+        !leadOnly && viewingType
+          ? async () => {
+              await attachment.remove.mutateAsync({ id: txn.id, attachmentType: viewingType });
+              if (viewingType === "receipt") setReceiptFileName(null);
+              else setContractFileName(null);
+              showSuccess(CC_SNACK.success.removeAttachment);
+            }
+          : undefined
+      }
+    />
+    </>
   );
 }
 
@@ -473,52 +506,41 @@ function FieldLabel({ children, id }: { children: React.ReactNode; id?: string }
 }
 
 /**
- * One attachment slot: upload, replace, remove.
- *
- * Removal exists in the source — a Remove button in the attachment viewer's
- * toolbar next to Download (AttachmentButton.tsx:466-477, calling
- * removeAttachment at :139-153). The port had the DELETE mutation built and
- * never called it, so a receipt attached by mistake could only be replaced
- * by another file, never taken off.
- *
- * It sits beside Replace rather than inside a viewer: this port manages
- * attachments from the form, and burying the only way to undo an upload
- * behind "open the file first" is a worse place for it.
+ * One attachment slot: a single bordered field, label to icon — the icon
+ * itself is the control. AttachmentButton.tsx:337-417 ("default full mode
+ * with label + box"): unattached it is a plus circle that opens the file
+ * picker; attached it becomes a file icon that opens the viewer instead.
+ * Removing lives in the viewer, beside Download — AttachmentButton.tsx:467-
+ * 477 — not back on the form: this dialog used to manage it as a text
+ * button here because it had no viewer at all, only "attached"/"none".
  */
 function AttachmentField({
   label,
   fileName,
-  busy,
   viewOnly,
   onPick,
-  onRemove,
+  onView,
 }: {
   label: string;
   fileName: string | null;
-  busy: boolean;
   /**
    * Show what is attached and offer no way to change it —
-   * `AttachmentButton.tsx:406,467`, which kills the upload trigger and drops
-   * the Remove button entirely while a row is not the viewer's to edit.
+   * `AttachmentButton.tsx:341-348`, which kills the upload trigger while a
+   * row is not the viewer's to edit.
    */
   viewOnly?: boolean;
   onPick: (file: File) => Promise<void>;
-  onRemove: () => Promise<void>;
+  onView: () => void;
 }) {
   const { showSuccess, showError } = useNotifications();
-  const [removing, setRemoving] = useState(false);
-  const remove = async () => {
-    setRemoving(true);
-    try {
-      await onRemove();
-      showSuccess(CC_SNACK.success.removeAttachment);
-    } catch (err) {
-      showError(describeError(err));
-    } finally {
-      setRemoving(false);
-    }
-  };
+  // AttachmentButton.tsx:77-80 — "local loading states specific to this
+  // component instance". Receipt and Contract are two separate instances of
+  // this component, each with its own local state, so uploading one never
+  // shows the other as busy.
+  const [uploading, setUploading] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const has = Boolean(fileName);
+
   const handle = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -526,49 +548,77 @@ function AttachmentField({
       showError(`File must be ${maxSizeLabel(CC_ATTACHMENT_MAX_BYTES)} or smaller.`);
       return;
     }
+    setUploading(true);
     try {
       await onPick(file);
+      showSuccess(CC_SNACK.success.uploadAttachment);
     } catch (err) {
       showError(describeError(err));
     } finally {
+      setUploading(false);
       if (input.current) input.current.value = "";
     }
   };
+
+  // AttachmentButton.tsx:339-348 — the source's own wording, by mode.
+  const title = viewOnly
+    ? has
+      ? `View Attach ${label}`
+      : `No attach ${label}`
+    : has
+      ? `View ${label}`
+      : `Attach ${label}`;
+
   return (
     <Box>
-      <FieldLabel>{label}</FieldLabel>
       <input ref={input} type="file" accept={CC_ATTACHMENT_ACCEPT} onChange={handle} style={{ display: "none" }} />
-      <Stack direction="row" alignItems="center" spacing={1}>
-        {!viewOnly && (
-          <Button
+      {/* Nothing to describe until a file is attached — no target for a
+          picker to point at yet, so the tooltip stays off until `has`. */}
+      <Tooltip
+        describeChild
+        title={title}
+        arrow
+        disableHoverListener={!has}
+        disableFocusListener={!has}
+        disableTouchListener={!has}
+        slotProps={{
+          tooltip: { sx: { fontSize: 10.5, px: 1, py: 0.5 } },
+          popper: { modifiers: [{ name: "offset", options: { offset: [0, -14] } }] },
+        }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            height: 50,
+            border: 1,
+            borderColor: "divider",
+            borderRadius: 1.5,
+            pl: 1.75,
+            pr: 0.75,
+          }}
+        >
+          <Typography sx={{ fontSize: 13.5 }}>{label}</Typography>
+          <IconButton
             size="small"
-            variant="outlined"
-            onClick={() => input.current?.click()}
-            disabled={busy}
-            sx={{ textTransform: "none", fontWeight: 600 }}
+            aria-label={title}
+            onClick={() => {
+              if (has) onView();
+              else input.current?.click();
+            }}
+            disabled={(viewOnly && !has) || uploading}
           >
-            {busy ? "Uploading…" : fileName ? "Replace" : "Upload"}
-          </Button>
-        )}
-        {fileName && !viewOnly && (
-          <Button
-            size="small"
-            variant="text"
-            color="error"
-            onClick={remove}
-            disabled={busy || removing}
-            sx={{ textTransform: "none", fontWeight: 600 }}
-          >
-            {removing ? "Removing…" : "Remove"}
-          </Button>
-        )}
-        <Typography sx={{ fontSize: 12, color: fileName ? "success.main" : "text.disabled" }} noWrap>
-          {fileName && (
-            <CheckIcon size={13} style={{ color: "var(--oxygen-palette-success-main)", flexShrink: 0 }} />
-          )}
-          {fileName ? "attached" : "none"}
-        </Typography>
-      </Stack>
+            {uploading ? (
+              <CircularProgress size={18} />
+            ) : has ? (
+              <FileIcon size={18} />
+            ) : (
+              <CirclePlusIcon size={18} />
+            )}
+          </IconButton>
+        </Box>
+      </Tooltip>
     </Box>
   );
 }
