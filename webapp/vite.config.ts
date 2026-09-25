@@ -28,6 +28,10 @@ import path from "path";
 // more origins: script-src for the two loaded scripts, connect-src for the
 // token exchange + Drive API calls they make, and frame-src for the
 // Picker's own iframe (hosted on docs.google.com, not inline).
+//
+// RevOps plays meeting recordings in a <video> streamed straight from drive-service's
+// internal Choreo endpoint (meet-app-backend's `playbackBaseUrl`), whose host differs per
+// environment — so media-src takes a wildcard. 
 const CSP = [
   "default-src 'self'",
   "script-src 'self' https://accounts.google.com https://apis.google.com",
@@ -35,6 +39,7 @@ const CSP = [
   "img-src 'self' data: blob: https://*.wso2.com https://wso2.cachefly.net https://*.asgardeo.io https://*.googleusercontent.com",
   "font-src 'self' data: https://wso2.cachefly.net",
   "connect-src 'self' https://*.wso2.com https://*.asgardeo.io https://*.googleapis.com https://accounts.google.com",
+  "media-src 'self' https://*.choreoapis.dev",
   "frame-src 'self' blob: data: https://*.asgardeo.io https://docs.google.com https://accounts.google.com",
   "object-src 'none'",
   "base-uri 'self'",
