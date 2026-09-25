@@ -17,6 +17,8 @@
 import type { ReactNode } from "react";
 import { Alert, Box } from "@wso2/oxygen-ui";
 import PerspectiveHeader from "@components/perspective-header/PerspectiveHeader";
+import { NothingHere } from "@components/perspective-landing/PerspectiveLanding";
+import { useActivePerspective } from "@context/perspective/PerspectiveContext";
 
 /**
  * Page frame for Echo: the heading, and the two whole-page states that must
@@ -44,21 +46,19 @@ export default function RevOpsShell({
   forbidden?: boolean;
   children: ReactNode;
 }) {
+  const active = useActivePerspective();
   return (
     <Box>
       <PerspectiveHeader title={title} subtitle={subtitle} />
 
       {!configured ? (
         <Alert severity="info" sx={{ mt: 1.5 }}>
-          Echo isn&apos;t connected yet. Set <code>{configKey}</code> in{" "}
+          RevOps isn&apos;t connected yet. Set <code>{configKey}</code> in{" "}
           <code>public/config.js</code> (the meet-app backend URL) and reload.
         </Alert>
       ) : forbidden ? (
-        <Alert severity="warning" sx={{ mt: 1.5 }}>
-          You don&apos;t have access to Echo. Meeting records are limited to the
-          teams that run them — ask the Echo owners if you think you should be
-          included.
-        </Alert>
+        // The same card ] other perspectives show for 403.
+        <NothingHere label={active.label} icon={active.icon} />
       ) : (
         children
       )}
