@@ -119,7 +119,7 @@ export default function RevOpsMeetingsPage() {
 
   return (
     <RevOpsShell
-      title="Echo"
+      title="RevOps"
       subtitle="Meetings recorded across the sales team."
       configured={configured}
       configKey="ONE_WSO2_REVOPS_BACKEND_URL"
