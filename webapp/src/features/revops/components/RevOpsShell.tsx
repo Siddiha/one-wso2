@@ -57,7 +57,7 @@ export default function RevOpsShell({
           <code>public/config.js</code> (the meet-app backend URL) and reload.
         </Alert>
       ) : forbidden ? (
-        // The same card ] other perspectives show for 403.
+        // The same card other perspectives show for 403.
         <NothingHere label={active.label} icon={active.icon} />
       ) : (
         children
