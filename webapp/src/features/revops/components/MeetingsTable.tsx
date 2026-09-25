@@ -241,7 +241,7 @@ export default function MeetingsTable({
                             title={
                               cancellable
                                 ? "Cancel meeting"
-                                : "Only the host or an Echo admin can cancel an upcoming meeting"
+                                : "Only the host or a RevOps admin can cancel an upcoming meeting"
                             }
                             arrow
                           >
