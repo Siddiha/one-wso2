@@ -114,7 +114,10 @@ function PageTitle({ label }: { label: string }): JSX.Element {
 // refused — there is simply nothing in here for this person yet. The
 // perspective's own icon says which empty room you're standing in, which a
 // generic glyph wouldn't.
-function NothingHere({
+//
+// Exported so a perspective that learns "nothing for you" from its backend rather than from
+// the rail (RevOps: meet-app answers 403) shows the same card, not its own variant of it.
+export function NothingHere({
   label,
   icon: Icon,
 }: {
