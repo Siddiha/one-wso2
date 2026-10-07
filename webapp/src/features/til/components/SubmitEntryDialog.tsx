@@ -95,18 +95,8 @@ function TilAutocompletePaper({
 // No equivalent search exists for Partner the way entity-service backs
 // Customer (see useCustomerSearch) -- entity-service only tracks "partner"
 // as a relationship on a Salesforce customer account, not a standalone
-// searchable list of partner organizations. This is a fixed local sample
-// list purely so the field offers the same pick-or-type UX as Customer;
-// freeSolo still means typing any other partner name is a valid submission.
-const SAMPLE_PARTNER_NAMES: readonly string[] = [
-  "Wayne Reseller Group",
-  "Oscorp Distribution",
-  "Hooli Partners",
-  "Pied Piper Alliance",
-  "Cyberdyne Solutions",
-  "Tyrell Alliance Partners",
-  "Gekko & Co",
-];
+// searchable list of partner organizations. Plain free-text instead of an
+// Autocomplete with suggestions (see the Partner field below).
 
 // Shared by all three whereDetail variants (Customer/Partner/Other) --
 // whereDetailInvalid now covers two different problems (empty, or over the
@@ -142,6 +132,11 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
   const [touched, setTouched] = useState(false);
   const create = useCreateTilSubmission();
   const uploadImage = useUploadTilImage();
+  // True while TilRichTextField has an image upload in flight -- blocks
+  // Share so a submission can never go out missing an image the user
+  // thought they'd just attached (see TilRichTextField's onUploadingChange
+  // for the full race condition this closes).
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   // Only searches real customer records -- Partner/Other keep plain
   // free-text entry (no equivalent searchable list exists for them). null
   // (not "") when where !== "Customer" so useCustomerSearch knows the field
@@ -161,11 +156,6 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
   // searching") to show.
   const [customerFieldFocused, setCustomerFieldFocused] = useState(false);
   const customerFieldOpen = customerFieldFocused;
-  // Same open-on-focus pattern as the Customer field, for the same reason
-  // (see customerFieldOpen's own comment) -- MUI's onOpen/onClose round-trip
-  // doesn't reliably fire for this freeSolo + controlled-inputValue combo.
-  const [partnerFieldFocused, setPartnerFieldFocused] = useState(false);
-  const partnerFieldOpen = partnerFieldFocused;
   const { showSuccess, showError } = useNotifications();
 
   // The byline is the signed-in user's own name — never typed, so it can't
@@ -184,7 +174,7 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
     (whereDetail.trim().length === 0 || whereDetail.trim().length > TIL_WHERE_DETAIL_MAX_LENGTH);
   const whatLength = tilPlainTextLength(what);
   const whatInvalid = isEmptyTilHtml(what) || whatLength > TIL_WHAT_MAX_LENGTH;
-  const invalid = whoInvalid || titleInvalid || whereInvalid || whereDetailInvalid || whatInvalid;
+  const invalid = whoInvalid || titleInvalid || whereInvalid || whereDetailInvalid || whatInvalid || isUploadingImage;
 
   const reset = () => {
     setTitle("");
@@ -192,6 +182,7 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
     setWhereDetail("");
     setWhat("");
     setTouched(false);
+    setIsUploadingImage(false);
     create.reset();
   };
 
@@ -372,49 +363,25 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
               <Typography variant="subtitle2" color={touched && whereDetailInvalid ? "error" : "text.primary"}>
                 {whereDetailCopy(where).label}
               </Typography>
-              <Autocomplete
-                freeSolo
-                // Static sample list, so MUI's own default substring filter
-                // applies here (unlike Customer, which overrides it to
-                // "show everything returned" since that filtering already
-                // happened server-side).
-                options={SAMPLE_PARTNER_NAMES}
-                slots={{ paper: TilAutocompletePaper }}
-                open={partnerFieldOpen}
-                inputValue={whereDetail}
-                onInputChange={(_event, next) => setWhereDetail(next)}
-                onChange={(_event, next) => setWhereDetail(next ?? "")}
-                slotProps={{
-                  paper: {
-                    empty: !SAMPLE_PARTNER_NAMES.some((p) => p.toLowerCase().includes(whereDetail.toLowerCase())),
-                    emptyLabel: "No matching partner — you can still use this name",
-                  } as PaperProps,
-                  popper: { style: { zIndex: 1301 }, placement: "bottom-start", modifiers: [{ name: "flip", enabled: false }] },
-                  listbox: { sx: { maxHeight: 240 } },
-                }}
-                renderInput={(params) => {
-                  const inputProps = params as typeof params & {
-                    onFocus?: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
-                    onBlur?: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
-                  };
-                  return (
-                    <TextField
-                      {...params}
-                      placeholder={whereDetailCopy(where).placeholder}
-                      error={touched && whereDetailInvalid}
-                      helperText={touched && whereDetailInvalid ? whereDetailErrorText(whereDetail) : whereDetailCopy(where).helper}
-                      onFocus={(e) => {
-                        inputProps.onFocus?.(e);
-                        setPartnerFieldFocused(true);
-                      }}
-                      onBlur={(e) => {
-                        inputProps.onBlur?.(e);
-                        setPartnerFieldFocused(false);
-                      }}
-                    />
-                  );
-                }}
+              {/* Plain free-text, same as "Other" -- no backing search
+                  service exists for partners the way entity-service backs
+                  Customer, so a static sample list here was just a handful
+                  of fictional company names a user could actually select
+                  and submit as a real entry's partner (caught in code
+                  review: CodeRabbit flagged this, confirmed it's a real
+                  data-integrity issue, not a false positive). */}
+              <TextField
+                placeholder={whereDetailCopy(where).placeholder}
+                value={whereDetail}
+                onChange={(e) => setWhereDetail(e.target.value)}
+                error={touched && whereDetailInvalid}
+                helperText={
+                  touched && whereDetailInvalid
+                    ? whereDetailErrorText(whereDetail)
+                    : `${whereDetail.length}/${TIL_WHERE_DETAIL_MAX_LENGTH}`
+                }
                 fullWidth
+                slotProps={{ htmlInput: { maxLength: TIL_WHERE_DETAIL_MAX_LENGTH } }}
               />
             </Stack>
           )}
@@ -468,6 +435,7 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
               onChange={setWhat}
               onUploadImage={uploadImage}
               onUploadError={showError}
+              onUploadingChange={setIsUploadingImage}
               placeholder="What did you learn? Explain it so others can learn from it too."
             />
           </Box>
@@ -493,8 +461,8 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
           <Button onClick={close} disabled={create.isPending}>
             Cancel
           </Button>
-          <Button variant="contained" onClick={submit} disabled={create.isPending}>
-            {create.isPending ? "Sharing…" : "Share"}
+          <Button variant="contained" onClick={submit} disabled={create.isPending || isUploadingImage}>
+            {create.isPending ? "Sharing…" : isUploadingImage ? "Uploading image…" : "Share"}
           </Button>
         </Stack>
       </DialogActions>

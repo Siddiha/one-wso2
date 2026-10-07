@@ -84,6 +84,7 @@ export default function TilHomePage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const hasActiveDateFilter = Boolean(dateFrom || dateTo);
   // Defaults to "all" -- the database already holds entries from many other
   // people (not just the signed-in employee), and that shared feed is the
   // whole point of this page, so it's the view people should land on
@@ -207,12 +208,17 @@ export default function TilHomePage() {
             />
             <Button
               size="small"
-              variant={showAdvanced ? "contained" : "outlined"}
+              // Stays visually active even when collapsed if a date filter
+              // is still silently applied -- closing this panel used to
+              // just hide the date fields without clearing them, so the
+              // feed stayed filtered with no indication why (found in code
+              // review).
+              variant={showAdvanced || hasActiveDateFilter ? "contained" : "outlined"}
               startIcon={<SlidersHorizontalIcon size={14} />}
               onClick={() => setShowAdvanced((v) => !v)}
               sx={{ flex: "none", textTransform: "none", fontWeight: 500, px: 1.5, minWidth: "auto", height: "37.125px" }}
             >
-              Advanced Search
+              Advanced Search{!showAdvanced && hasActiveDateFilter ? " •" : ""}
             </Button>
           </Stack>
 

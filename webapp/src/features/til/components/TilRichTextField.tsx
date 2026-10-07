@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { Box, useTheme } from "@wso2/oxygen-ui";
@@ -34,6 +34,7 @@ export default function TilRichTextField({
   onChange,
   onUploadImage,
   onUploadError,
+  onUploadingChange,
   placeholder,
   disabled = false,
 }: {
@@ -50,11 +51,26 @@ export default function TilRichTextField({
   // simply not having registered at all. Optional so this component still
   // compiles for a caller that doesn't care to surface it.
   onUploadError?: (message: string) => void;
+  // Fires with true right before an upload starts and false once it settles
+  // (success or failure). Lets a caller (SubmitEntryDialog) disable its own
+  // Share button for the duration -- without this, clicking Share while an
+  // upload is still pending submitted the entry's `what` BEFORE the image
+  // was inserted, so a successful submission silently shipped without the
+  // image the user thought they'd attached (found in code review).
+  onUploadingChange?: (uploading: boolean) => void;
   placeholder?: string;
   disabled?: boolean;
 }) {
   const theme = useTheme();
   const quillRef = useRef<ReactQuill>(null);
+  // Only one upload accepted at a time (isUploadingRef guards re-entrancy),
+  // and the editor itself goes read-only for the duration (readOnly={...
+  // isUploading} below) -- together these mean the selection index captured
+  // before the upload started can never go stale from the user typing in
+  // the meantime, which was the other half of the race condition found in
+  // code review (insertEmbed landing at the wrong position after an edit).
+  const isUploadingRef = useRef(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Shared by the toolbar's image button and by pasting an image file
   // directly -- both end up with a File and a cursor position to insert at.
@@ -66,6 +82,7 @@ export default function TilRichTextField({
   uploadAndInsert.current = async (file: File) => {
     const editor = quillRef.current?.getEditor();
     if (!editor || !onUploadImage) return;
+    if (isUploadingRef.current) return;
     if (!file.type.startsWith("image/")) {
       onUploadError?.("Only image files can be inserted.");
       return;
@@ -75,6 +92,9 @@ export default function TilRichTextField({
       return;
     }
     const range = editor.getSelection(true);
+    isUploadingRef.current = true;
+    setIsUploading(true);
+    onUploadingChange?.(true);
     try {
       const url = await onUploadImage(file);
       editor.insertEmbed(range?.index ?? editor.getLength(), "image", url, "user");
@@ -84,6 +104,10 @@ export default function TilRichTextField({
       // blocks the rest of the entry the user was typing -- but the
       // failure itself is now surfaced, not swallowed.
       onUploadError?.("Couldn't upload that image. Please try again.");
+    } finally {
+      isUploadingRef.current = false;
+      setIsUploading(false);
+      onUploadingChange?.(false);
     }
   };
 
@@ -249,7 +273,7 @@ export default function TilRichTextField({
         placeholder={placeholder}
         modules={modules}
         formats={FORMATS}
-        readOnly={disabled}
+        readOnly={disabled || isUploading}
       />
     </Box>
   );
