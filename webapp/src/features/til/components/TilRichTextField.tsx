@@ -14,33 +14,152 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { useEffect, useMemo, useRef } from "react";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { Box, useTheme } from "@wso2/oxygen-ui";
 import { sanitizeTilHtml } from "../util/tilRichText";
 
 // react-quill-new, same as every other One WSO2 rich-text field -- draft-js
-// has no React 19 support. Toolbar is the minimum that makes a
-// multi-paragraph learning readable: bold/italic/underline and lists — no
-// link/undo-redo, kept deliberately simple.
-const MODULES = {
-  toolbar: [["bold", "italic", "underline"], [{ list: "ordered" }, { list: "bullet" }], ["clean"]],
-  clipboard: { matchVisual: false, matchers: [] },
-};
-const FORMATS = ["bold", "italic", "underline", "list", "bullet"];
+// has no React 19 support. Toolbar is bold/italic/underline, lists, and now
+// an image button — the minimum that makes a multi-paragraph learning
+// readable plus a screenshot, which is most of what people actually paste
+// in. Still no link/undo-redo, kept deliberately simple otherwise.
+const FORMATS = ["bold", "italic", "underline", "list", "bullet", "image"];
+
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // mirrors uploads.py's own limit — reject oversized files client-side too, not just let the backend 400 after a slow upload
 
 export default function TilRichTextField({
   value,
   onChange,
+  onUploadImage,
+  onUploadError,
   placeholder,
   disabled = false,
 }: {
   value: string;
   onChange: (html: string) => void;
+  // Uploads a picked/pasted image and resolves to its stored URL. Optional
+  // only so this component still compiles for a caller with nothing to
+  // upload to — every real caller today always provides it.
+  onUploadImage?: (file: File) => Promise<string>;
+  // Called with a short, user-facing reason whenever an image is rejected
+  // or fails to upload. Without this, every one of those cases (oversized
+  // file, non-image, network/server failure) failed completely silently --
+  // nothing inserted, nothing shown, indistinguishable from the paste/click
+  // simply not having registered at all. Optional so this component still
+  // compiles for a caller that doesn't care to surface it.
+  onUploadError?: (message: string) => void;
   placeholder?: string;
   disabled?: boolean;
 }) {
   const theme = useTheme();
+  const quillRef = useRef<ReactQuill>(null);
+
+  // Shared by the toolbar's image button and by pasting an image file
+  // directly -- both end up with a File and a cursor position to insert at.
+  // Defined with useRef (not a plain function) so the toolbar handler below
+  // — captured once into MODULES at first render — always calls the LATEST
+  // version rather than one closed over a stale onUploadImage/onUploadError
+  // from an earlier render.
+  const uploadAndInsert = useRef<(file: File) => Promise<void>>(async () => {});
+  uploadAndInsert.current = async (file: File) => {
+    const editor = quillRef.current?.getEditor();
+    if (!editor || !onUploadImage) return;
+    if (!file.type.startsWith("image/")) {
+      onUploadError?.("Only image files can be inserted.");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      onUploadError?.("Image must be 5 MB or smaller.");
+      return;
+    }
+    const range = editor.getSelection(true);
+    try {
+      const url = await onUploadImage(file);
+      editor.insertEmbed(range?.index ?? editor.getLength(), "image", url, "user");
+      editor.setSelection((range?.index ?? 0) + 1, 0, "user");
+    } catch {
+      // Best-effort in the sense that a failed upload never corrupts or
+      // blocks the rest of the entry the user was typing -- but the
+      // failure itself is now surfaced, not swallowed.
+      onUploadError?.("Couldn't upload that image. Please try again.");
+    }
+  };
+
+  // react-quill-new has no onPaste prop (only onKeyDown/Press/Up — checked
+  // against its own type definitions before writing this) — a Quill
+  // clipboard matcher doesn't work here either, since matchers only ever
+  // see an <img> node already pointing at a URL or data: blob, never the
+  // raw image FILE a plain copy-paste of a screenshot carries in
+  // clipboardData.items. Attaching directly to Quill's own editable DOM
+  // node is the only way to intercept it. Only prevents the paste's
+  // default handling when an image file is actually found, so a normal
+  // text paste still goes through Quill's own handling untouched.
+  useEffect(() => {
+    const root = quillRef.current?.getEditor().root;
+    if (!root) return;
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData ? Array.from(e.clipboardData.items) : [];
+      const imageItem = items.find((item) => item.type.startsWith("image/"));
+      const file = imageItem?.getAsFile();
+      if (file) {
+        e.preventDefault();
+        void uploadAndInsert.current(file);
+      }
+    };
+    root.addEventListener("paste", handlePaste);
+    return () => root.removeEventListener("paste", handlePaste);
+  }, []);
+
+  // Quill's own snow theme never sets a `title` on its toolbar buttons --
+  // each one is just an icon with no accessible name and no hover tooltip,
+  // which is why none of them say what they do. Set directly on the DOM
+  // nodes Quill already built (via the toolbar module's own .container),
+  // rather than through modules.toolbar config, which has no option for
+  // this at all.
+  useEffect(() => {
+    const toolbar = quillRef.current?.getEditor().getModule("toolbar") as { container?: HTMLElement } | undefined;
+    const container = toolbar?.container;
+    if (!container) return;
+    const labels: [string, string][] = [
+      [".ql-bold", "Bold"],
+      [".ql-italic", "Italic"],
+      [".ql-underline", "Underline"],
+      ['.ql-list[value="ordered"]', "Numbered list"],
+      ['.ql-list[value="bullet"]', "Bullet list"],
+      [".ql-image", "Insert image (or paste one directly)"],
+      [".ql-clean", "Clear formatting"],
+    ];
+    for (const [selector, label] of labels) {
+      container.querySelector(selector)?.setAttribute("title", label);
+    }
+  }, []);
+
+  const modules = useMemo(
+    () => ({
+      toolbar: {
+        container: [["bold", "italic", "underline"], [{ list: "ordered" }, { list: "bullet" }], ["image"], ["clean"]],
+        handlers: {
+          image: () => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "image/*";
+            input.onchange = () => {
+              const file = input.files?.[0];
+              if (file) void uploadAndInsert.current(file);
+            };
+            input.click();
+          },
+        },
+      },
+      clipboard: {
+        matchVisual: false,
+        matchers: [],
+      },
+    }),
+    [],
+  );
 
   return (
     <Box
@@ -123,11 +242,12 @@ export default function TilRichTextField({
       }}
     >
       <ReactQuill
+        ref={quillRef}
         theme="snow"
         value={value}
         onChange={(html) => onChange(sanitizeTilHtml(html))}
         placeholder={placeholder}
-        modules={MODULES}
+        modules={modules}
         formats={FORMATS}
         readOnly={disabled}
       />

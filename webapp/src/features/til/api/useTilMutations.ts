@@ -22,7 +22,7 @@
 // transient failure worth retrying.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { authedDelete, authedPost } from "@api/http";
+import { authedDelete, authedPost, authedUpload } from "@api/http";
 import { useAccessToken } from "@hooks/useAccessToken";
 import { tilServiceUrls } from "@config/apiConfig";
 import { useAsgardeoSub } from "@hooks/useAsgardeoSub";
@@ -46,6 +46,22 @@ export function useCreateTilSubmission() {
       await qc.invalidateQueries({ queryKey: submissionsKey });
     },
   });
+}
+
+/** POST /uploads — an image pasted or picked in the "What did you learn?"
+ * editor. Returns the stored image's absolute URL, which the editor inserts
+ * directly as an <img src>. Not a React Query mutation hook in the usual
+ * sense (no cache to invalidate, nothing in the submissions list changes) —
+ * just the auth/upload plumbing, called directly from the editor's own
+ * image/paste handlers rather than via `.mutate(...)`. */
+export function useUploadTilImage() {
+  const getAccessToken = useAccessToken();
+  return async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const result = await authedUpload<{ url: string }>(tilServiceUrls.uploads, await getAccessToken(), formData);
+    return result.url;
+  };
 }
 
 /** DELETE /submissions/{id}. The backend re-checks canModerate — this is presentation-only gating. */

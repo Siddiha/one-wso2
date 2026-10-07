@@ -739,7 +739,7 @@ export const PERSPECTIVES: readonly PerspectiveDef[] = [
     ? [
         {
           key: "knowledge-base",
-          label: "Knowledge Base",
+          label: "Knowledge",
           icon: BookOpenIcon,
           access: true,
           path: "/knowledge-base",

@@ -84,19 +84,46 @@ export default function TilEntryPage() {
       ) : submission.data ? (
         <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 4 } }}>
           <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                {submission.data.who}
-              </Typography>
-              <Chip
-                label={
-                  submission.data.whereDetail
-                    ? `${submission.data.where} — ${submission.data.whereDetail}`
-                    : submission.data.where
-                }
-                variant="outlined"
-              />
-            </Stack>
+            <Box sx={{ minWidth: 0 }}>
+              {/* Old entries predate the title field (backend default: "")
+                  -- falls back to the who/where line alone as the heading
+                  for those, same as the feed card. */}
+              {submission.data.title ? (
+                <>
+                  <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.75 }}>
+                    {submission.data.title}
+                  </Typography>
+                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      Submitted by {submission.data.who}
+                    </Typography>
+                    <Chip
+                      label={
+                        submission.data.whereDetail
+                          ? `${submission.data.where} — ${submission.data.whereDetail}`
+                          : submission.data.where
+                      }
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Stack>
+                </>
+              ) : (
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    Submitted by {submission.data.who}
+                  </Typography>
+                  <Chip
+                    label={
+                      submission.data.whereDetail
+                        ? `${submission.data.where} — ${submission.data.whereDetail}`
+                        : submission.data.where
+                    }
+                    variant="outlined"
+                  />
+                </Stack>
+              )}
+            </Box>
             {canDelete && (
               <Button
                 size="small"

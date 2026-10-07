@@ -1668,6 +1668,10 @@ export const tilServiceUrls = {
   // configured on the backend", so the form can't tell those apart and
   // doesn't need to; either way it just has no suggestions to show.
   customersSearch: (q: string) => `${tilBackendUrl}/customers/search?q=${encodeURIComponent(q)}`,
+  // Image upload for the "What did you learn?" rich-text field. Returns
+  // { url } — an absolute URL to the stored image, inserted directly into
+  // the entry's HTML. Webapp-only, same gate as POST /submissions.
+  uploads: `${tilBackendUrl}/uploads`,
 };
 
 // ---------------------------------------------------------------------------

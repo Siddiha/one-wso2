@@ -35,6 +35,7 @@ describe("normalizeSubmission", () => {
   it("parses the wire createdAt string into a real Date", () => {
     const result = normalizeSubmission({
       id: "1",
+      title: "What I learned",
       who: "Jane Doe, CSM",
       where: "Customer",
       whereDetail: "Acme Corp",
@@ -49,6 +50,7 @@ describe("normalizeSubmission", () => {
   it("passes every other field through unchanged", () => {
     const result = normalizeSubmission({
       id: "42",
+      title: "A title",
       who: "Someone",
       where: "Internal",
       whereDetail: null,
@@ -57,6 +59,7 @@ describe("normalizeSubmission", () => {
       createdAt: "2026-10-01T10:00:00.000Z",
     });
     expect(result.id).toBe("42");
+    expect(result.title).toBe("A title");
     expect(result.who).toBe("Someone");
     expect(result.where).toBe("Internal");
     expect(result.what).toBe("A thing.");

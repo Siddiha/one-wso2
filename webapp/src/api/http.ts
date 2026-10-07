@@ -368,6 +368,24 @@ export async function authedPut<T>(
   return readJsonOrNull<T>(res, url);
 }
 
+// Authed POST with a FormData body (a file upload) — kept separate from
+// authedPost rather than folded in with a flag: authedPost's contract is
+// "JSON in, JSON or null out", and a FormData body must NOT get the
+// `Content-Type: application/json` header buildHeaders(..., true) would add.
+// Content-Type is left entirely unset here on purpose: the browser sets
+// `multipart/form-data; boundary=...` itself from the FormData instance, and
+// setting it manually would drop the boundary and break parsing server-side.
+export async function authedUpload<T>(
+  url: string,
+  accessToken: string,
+  formData: FormData,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
+  const res = await fetchWithReauth(url, { method: "POST", headers: buildHeaders(extraHeaders), body: formData }, accessToken);
+  if (!res.ok) await throwFromError(url, res, "authedUpload");
+  return readJsonOrThrow<T>(res, url);
+}
+
 // Shared React Query retry predicate. Skip retries on 4xx (they don't
 // improve with a retry — the caller sent a bad request, or the user
 // isn't authorized) and retry once on anything else. Kept next to the

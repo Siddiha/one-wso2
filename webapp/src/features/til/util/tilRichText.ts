@@ -28,8 +28,8 @@ import DOMPurify from "dompurify";
 // read by every OTHER employee who opens the feed, so the read side never
 // trusts that the editor sanitized it either.
 const SANITIZE_CONFIG = {
-  ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "ol", "ul", "li", "a"],
-  ALLOWED_ATTR: ["href", "target"],
+  ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "ol", "ul", "li", "a", "img"],
+  ALLOWED_ATTR: ["href", "target", "src", "alt"],
   ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 };
 

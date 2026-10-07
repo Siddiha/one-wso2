@@ -20,14 +20,15 @@ import {
   Button,
   IconButton,
   InputAdornment,
-  MenuItem,
   Pagination,
   Skeleton,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from "@wso2/oxygen-ui";
-import { PlusIcon, SearchIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
+import { PlusIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import { useNavigate } from "react-router";
 import ConfirmationDialog, { type ConfirmationContent } from "@components/confirmation-dialog/ConfirmationDialog";
 import { useNotifications } from "@context/notifications/NotificationsContext";
@@ -76,9 +77,18 @@ export default function TilHomePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmContent, setConfirmContent] = useState<ConfirmationContent | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchScope, setSearchScope] = useState<SearchScope>("who");
+  // Fixed to entry content ("what was learned") for now -- Advanced Search
+  // only exposes the date range; picking a different scope (name/email/
+  // customer) isn't offered in the UI yet, so there's no setter to wire up.
+  const searchScope = "what" as SearchScope;
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Defaults to "all" -- the database already holds entries from many other
+  // people (not just the signed-in employee), and that shared feed is the
+  // whole point of this page, so it's the view people should land on
+  // rather than "my own entries" first.
+  const [tab, setTab] = useState<"all" | "mine">("all");
   const [page, setPage] = useState(1);
 
   const canModerate = userInfo.data?.canModerate ?? false;
@@ -87,6 +97,7 @@ export default function TilHomePage() {
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return (submissions.data?.items ?? []).filter((s) => {
+      if (tab === "mine" && s.submittedByEmail !== myEmail) return false;
       const day = localDateString(s.createdAt);
       if (dateFrom && day < dateFrom) return false;
       if (dateTo && day > dateTo) return false;
@@ -107,8 +118,8 @@ export default function TilHomePage() {
           return tilPlainText(s.what).toLowerCase().includes(query);
       }
     });
-  }, [submissions.data, searchQuery, searchScope, dateFrom, dateTo]);
-  const isFiltering = Boolean(searchQuery.trim() || dateFrom || dateTo);
+  }, [submissions.data, searchQuery, searchScope, dateFrom, dateTo, tab, myEmail]);
+  const isFiltering = Boolean(searchQuery.trim() || dateFrom || dateTo || tab === "mine");
 
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / ENTRIES_PER_PAGE));
   // Clamped, not reset via an effect: if a filter change leaves `page`
@@ -151,66 +162,106 @@ export default function TilHomePage() {
       }
     >
       {submissions.data && submissions.data.items.length > 0 && (
-        <Stack direction="row" spacing={1.5} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1.5 }}>
-          <TextField
-            select
-            size="small"
-            label="Search in"
-            value={searchScope}
-            onChange={(e) => setSearchScope(e.target.value as SearchScope)}
-            sx={{ width: 190 }}
-          >
-            {SEARCH_SCOPES.map((scope) => (
-              <MenuItem key={scope.value} value={scope.value}>
-                {scope.label}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            size="small"
-            type="search"
-            placeholder="Search…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            autoCorrect="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            sx={{ flex: 1, minWidth: 200 }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon size={16} />
-                  </InputAdornment>
-                ),
-                endAdornment: searchQuery && (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearchQuery("")} aria-label="Clear search">
-                      <XIcon size={16} />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
-          <TextField
-            size="small"
-            type="date"
-            label="Submitted from"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: dateTo || undefined } }}
-            sx={{ width: 170 }}
-          />
-          <TextField
-            size="small"
-            type="date"
-            label="Submitted to"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: dateFrom || undefined } }}
-            sx={{ width: 170 }}
-          />
+        <Tabs
+          value={tab}
+          onChange={(_, next: "all" | "mine") => {
+            setTab(next);
+            setPage(1);
+          }}
+          sx={{ mb: 1.5, minHeight: 36, "& .MuiTab-root": { minHeight: 36, textTransform: "none" } }}
+        >
+          <Tab value="all" label="All entries" />
+          <Tab value="mine" label="My entries" />
+        </Tabs>
+      )}
+
+      {submissions.data && submissions.data.items.length > 0 && (
+        <Stack spacing={1.5} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="flex-end" sx={{ flexWrap: "wrap", rowGap: 1.5 }}>
+            <TextField
+              size="small"
+              type="search"
+              placeholder="Search what was learned…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              sx={{ flex: 1, minWidth: 200, "& .MuiInputBase-root": { height: "37.125px" } }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon size={16} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchQuery && (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setSearchQuery("")} aria-label="Clear search">
+                        <XIcon size={16} />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+            <Button
+              size="small"
+              variant={showAdvanced ? "contained" : "outlined"}
+              startIcon={<SlidersHorizontalIcon size={14} />}
+              onClick={() => setShowAdvanced((v) => !v)}
+              sx={{ flex: "none", textTransform: "none", fontWeight: 500, px: 1.5, minWidth: "auto", height: "37.125px" }}
+            >
+              Advanced Search
+            </Button>
+          </Stack>
+
+          {showAdvanced && (
+            <Stack direction="row" spacing={1.5} alignItems="flex-end" sx={{ flexWrap: "wrap", rowGap: 1.5 }}>
+              <TextField
+                size="small"
+                type="date"
+                label="Submitted from"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { max: dateTo || undefined },
+                  input: {
+                    endAdornment: dateFrom && (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => setDateFrom("")} aria-label="Clear from date">
+                          <XIcon size={16} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                sx={{ width: 170, "& .MuiInputBase-root": { height: "37.125px" } }}
+              />
+              <TextField
+                size="small"
+                type="date"
+                label="Submitted to"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { min: dateFrom || undefined },
+                  input: {
+                    endAdornment: dateTo && (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => setDateTo("")} aria-label="Clear to date">
+                          <XIcon size={16} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                sx={{ width: 170, "& .MuiInputBase-root": { height: "37.125px" } }}
+              />
+            </Stack>
+          )}
         </Stack>
       )}
 
@@ -248,9 +299,11 @@ export default function TilHomePage() {
       ) : (
         <Box sx={{ py: 4, textAlign: "center" }}>
           <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
-            {isFiltering
-              ? "No entries match your search."
-              : "No entries yet. Be the first to share something you learned."}
+            {tab === "mine" && !searchQuery.trim() && !dateFrom && !dateTo
+              ? "You haven't shared an entry yet."
+              : isFiltering
+                ? "No entries match your search."
+                : "No entries yet. Be the first to share something you learned."}
           </Typography>
         </Box>
       )}
