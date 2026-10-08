@@ -51,15 +51,17 @@ const WHERE_OPTIONS_NEEDING_DETAIL: readonly TilWhere[] = ["Customer", "Partner"
 
 // MUI's Autocomplete unconditionally skips `noOptionsText` when `freeSolo`
 // is set (see Autocomplete.js: `groupedOptions.length === 0 && !freeSolo`)
-// -- freeSolo is required here (a not-yet-onboarded customer, or a partner
-// not in the sample list, must still be a valid submission), so with zero
-// matches the Popper mounted an entirely EMPTY Paper: visually
-// indistinguishable from the dropdown never opening at all, which is what
-// every prior bug report actually showed. This paper slot renders our own
-// fallback text instead of relying on that internally-gated branch,
-// confirmed against a standalone repro using the same MUI/oxygen-ui build
-// before being applied here. Shared between the Customer and Partner
-// fields below — same MUI bug, same workaround, just different copy.
+// -- freeSolo is required here (a not-yet-onboarded customer must still be
+// a valid submission), so with zero matches the Popper mounted an entirely
+// EMPTY Paper: visually indistinguishable from the dropdown never opening
+// at all, which is what every prior bug report actually showed. This paper
+// slot renders our own fallback text instead of relying on that
+// internally-gated branch, confirmed against a standalone repro using the
+// same MUI/oxygen-ui build before being applied here. Used by the Customer
+// field below -- Partner is plain free-text (no backing search service
+// exists for it the way entity-service backs Customer), so it never needed
+// this component, but the loading/empty props stay generic in case another
+// Autocomplete field needs the same workaround later.
 //
 // Defined at module scope (not inside SubmitEntryDialog) and taking
 // loading/empty as props rather than closing over component state -- a
@@ -92,10 +94,9 @@ function TilAutocompletePaper({
   );
 }
 
-// No equivalent search exists for Partner the way entity-service backs
-// Customer (see useCustomerSearch) -- entity-service only tracks "partner"
-// as a relationship on a Salesforce customer account, not a standalone
-// searchable list of partner organizations. Plain free-text instead of an
+// No searchable partner list exists the way Customer has one (see
+// useCustomerSearch) -- no backing service tracks partner organizations as
+// a standalone, searchable list. Plain free-text instead of an
 // Autocomplete with suggestions (see the Partner field below).
 
 // Shared by all three whereDetail variants (Customer/Partner/Other) --
@@ -250,11 +251,11 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
               autoFocus
               // The select variant renders its box ~3px taller than a plain
               // TextField by default (measured directly: 40.125px vs
-              // 37.125px) -- harmless on its own, but next to the plain
-              // "Who" field above it, the extra height reads as the
-              // dropdown's own arrow icon sitting slightly off, even though
-              // it's centered correctly within that taller box. Pinned to
-              // match "Who"'s real measured height exactly.
+              // 37.125px) -- harmless on its own, but this field sits in
+              // the same row as the plain "Title" field on the right, and
+              // the extra height makes the two look misaligned even though
+              // each is individually correct. Pinned to the plain variant's
+              // real measured height so both line up exactly.
               sx={{ "& .MuiInputBase-root": { height: "37.125px" } }}
             >
               {TIL_WHERE_OPTIONS.map((opt) => (
@@ -365,11 +366,9 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
               </Typography>
               {/* Plain free-text, same as "Other" -- no backing search
                   service exists for partners the way entity-service backs
-                  Customer, so a static sample list here was just a handful
-                  of fictional company names a user could actually select
-                  and submit as a real entry's partner (caught in code
-                  review: CodeRabbit flagged this, confirmed it's a real
-                  data-integrity issue, not a false positive). */}
+                  Customer, so a static sample list here would just be a
+                  handful of fictional company names a user could select
+                  and submit as a real entry's partner. */}
               <TextField
                 placeholder={whereDetailCopy(where).placeholder}
                 value={whereDetail}

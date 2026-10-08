@@ -33,7 +33,7 @@ export function isTilWhere(value: string): value is TilWhere {
 }
 
 export const TIL_WHAT_MAX_LENGTH = 5000;
-export const TIL_TITLE_MAX_LENGTH = 50;
+export const TIL_TITLE_MAX_LENGTH = 100;
 export const TIL_WHERE_DETAIL_MAX_LENGTH = 200;
 export const TIL_WHO_MAX_LENGTH = 200;
 

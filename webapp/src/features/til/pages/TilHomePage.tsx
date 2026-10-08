@@ -51,14 +51,6 @@ function localDateString(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-const SEARCH_SCOPES = [
-  { value: "who", label: "Submitted by (name)" },
-  { value: "email", label: "Submitted by (email)" },
-  { value: "whereDetail", label: "Customer / Partner" },
-  { value: "what", label: "What was learned" },
-] as const;
-type SearchScope = (typeof SEARCH_SCOPES)[number]["value"];
-
 const ENTRIES_PER_PAGE = 10;
 
 // Today I Learned: a company-wide feed of learnings from customers, partners,
@@ -77,10 +69,6 @@ export default function TilHomePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmContent, setConfirmContent] = useState<ConfirmationContent | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  // Fixed to entry content ("what was learned") for now -- Advanced Search
-  // only exposes the date range; picking a different scope (name/email/
-  // customer) isn't offered in the UI yet, so there's no setter to wire up.
-  const searchScope = "what" as SearchScope;
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -98,28 +86,19 @@ export default function TilHomePage() {
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return (submissions.data?.items ?? []).filter((s) => {
-      if (tab === "mine" && s.submittedByEmail !== myEmail) return false;
+      if (tab === "mine" && s.submittedByEmail.toLowerCase() !== myEmail?.toLowerCase()) return false;
       const day = localDateString(s.createdAt);
       if (dateFrom && day < dateFrom) return false;
       if (dateTo && day > dateTo) return false;
       if (!query) return true;
-      // A plain substring match, not a regex: "not exact" is the whole
-      // point, and nobody searching a feed like this wants to write a
-      // pattern. Exactly one field, whichever the dropdown names — no
-      // "search everywhere" option, so a search can't silently match on a
-      // field the person didn't mean to search.
-      switch (searchScope) {
-        case "who":
-          return s.who.toLowerCase().includes(query);
-        case "email":
-          return s.submittedByEmail.toLowerCase().includes(query);
-        case "whereDetail":
-          return s.whereDetail?.toLowerCase().includes(query) ?? false;
-        case "what":
-          return tilPlainText(s.what).toLowerCase().includes(query);
-      }
+      // A plain substring match against entry content only, not a regex:
+      // "not exact" is the whole point, and nobody searching a feed like
+      // this wants to write a pattern. No scope picker in this UI (Advanced
+      // Search only exposes the date range), so this always searches
+      // "what was learned" -- the one field people actually want to search.
+      return tilPlainText(s.what).toLowerCase().includes(query);
     });
-  }, [submissions.data, searchQuery, searchScope, dateFrom, dateTo, tab, myEmail]);
+  }, [submissions.data, searchQuery, dateFrom, dateTo, tab, myEmail]);
   const isFiltering = Boolean(searchQuery.trim() || dateFrom || dateTo || tab === "mine");
 
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / ENTRIES_PER_PAGE));
@@ -172,7 +151,12 @@ export default function TilHomePage() {
           sx={{ mb: 1.5, minHeight: 36, "& .MuiTab-root": { minHeight: 36, textTransform: "none" } }}
         >
           <Tab value="all" label="All entries" />
-          <Tab value="mine" label="My entries" />
+          {/* Disabled while identity is still loading -- myEmail is
+              undefined until userInfo resolves, so selecting this tab any
+              earlier filtered out every entry and showed the misleading
+              "You haven't shared an entry yet." empty state even though
+              nothing had actually been checked yet. */}
+          <Tab value="mine" label="My entries" disabled={userInfo.isLoading} />
         </Tabs>
       )}
 
@@ -188,6 +172,12 @@ export default function TilHomePage() {
               autoCorrect="off"
               autoCapitalize="none"
               spellCheck={false}
+              // Pinned to one explicit height (not left to size="small"
+              // alone) so this field, the Advanced Search button, and both
+              // date fields below all line up exactly -- a plain TextField,
+              // a Button and a date-type TextField each resolve "small" to
+              // a slightly different native height in this theme, so
+              // size="small" alone doesn't guarantee they match each other.
               sx={{ flex: 1, minWidth: 200, "& .MuiInputBase-root": { height: "37.125px" } }}
               slotProps={{
                 input: {
@@ -211,8 +201,7 @@ export default function TilHomePage() {
               // Stays visually active even when collapsed if a date filter
               // is still silently applied -- closing this panel used to
               // just hide the date fields without clearing them, so the
-              // feed stayed filtered with no indication why (found in code
-              // review).
+              // feed stayed filtered with no indication why.
               variant={showAdvanced || hasActiveDateFilter ? "contained" : "outlined"}
               startIcon={<SlidersHorizontalIcon size={14} />}
               onClick={() => setShowAdvanced((v) => !v)}
@@ -305,11 +294,13 @@ export default function TilHomePage() {
       ) : (
         <Box sx={{ py: 4, textAlign: "center" }}>
           <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
-            {tab === "mine" && !searchQuery.trim() && !dateFrom && !dateTo
-              ? "You haven't shared an entry yet."
-              : isFiltering
-                ? "No entries match your search."
-                : "No entries yet. Be the first to share something you learned."}
+            {tab === "mine" && userInfo.isError
+              ? "Couldn't check which entries are yours. Try again shortly."
+              : tab === "mine" && !searchQuery.trim() && !dateFrom && !dateTo
+                ? "You haven't shared an entry yet."
+                : isFiltering
+                  ? "No entries match your search."
+                  : "No entries yet. Be the first to share something you learned."}
           </Typography>
         </Box>
       )}

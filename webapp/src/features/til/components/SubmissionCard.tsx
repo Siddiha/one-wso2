@@ -116,7 +116,17 @@ export default function SubmissionCard({
           </Tooltip>
         )}
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-word" }}>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{
+          wordBreak: "break-word",
+          display: "-webkit-box",
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}
+      >
         {tilExcerpt(submission.what)}
       </Typography>
       <Typography variant="caption" color="text.secondary">

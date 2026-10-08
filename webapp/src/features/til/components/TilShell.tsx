@@ -38,7 +38,7 @@ export default function TilShell({
   return (
     <Box>
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 0.5 }}>
-        <Typography component="h1" variant="h4" fontWeight={700}>
+        <Typography component="h1" variant="h5">
           {title}
         </Typography>
         {configured && action}

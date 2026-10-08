@@ -27,7 +27,7 @@ import { sanitizeTilHtml } from "../util/tilRichText";
 // in. Still no link/undo-redo, kept deliberately simple otherwise.
 const FORMATS = ["bold", "italic", "underline", "list", "bullet", "image"];
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // mirrors uploads.py's own limit — reject oversized files client-side too, not just let the backend 400 after a slow upload
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // matches the upload size limit enforced by the TIL backend — reject oversized files client-side too, not just let the backend 400 after a slow upload
 
 export default function TilRichTextField({
   value,
@@ -56,7 +56,7 @@ export default function TilRichTextField({
   // Share button for the duration -- without this, clicking Share while an
   // upload is still pending submitted the entry's `what` BEFORE the image
   // was inserted, so a successful submission silently shipped without the
-  // image the user thought they'd attached (found in code review).
+  // image the user thought they'd attached.
   onUploadingChange?: (uploading: boolean) => void;
   placeholder?: string;
   disabled?: boolean;
@@ -67,8 +67,8 @@ export default function TilRichTextField({
   // and the editor itself goes read-only for the duration (readOnly={...
   // isUploading} below) -- together these mean the selection index captured
   // before the upload started can never go stale from the user typing in
-  // the meantime, which was the other half of the race condition found in
-  // code review (insertEmbed landing at the wrong position after an edit).
+  // the meantime, which was the other half of the race condition this
+  // closes (insertEmbed landing at the wrong position after an edit).
   const isUploadingRef = useRef(false);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -97,13 +97,27 @@ export default function TilRichTextField({
     onUploadingChange?.(true);
     try {
       const url = await onUploadImage(file);
-      editor.insertEmbed(range?.index ?? editor.getLength(), "image", url, "user");
-      editor.setSelection((range?.index ?? 0) + 1, 0, "user");
-    } catch {
+      const insertAt = range?.index ?? editor.getLength();
+      editor.insertEmbed(insertAt, "image", url, "user");
+      editor.setSelection(insertAt + 1, 0, "user");
+      // The inserted image can easily be taller than the editor's visible
+      // area (a full-resolution screenshot in a ~200px-tall box), and
+      // nothing about insertEmbed/setSelection scrolls it into view on its
+      // own -- without this, a successful upload can look exactly like
+      // nothing happened, because the result is real but off-screen below
+      // the fold (root-caused: confirmed via DevTools that the upload
+      // request itself was succeeding every time this was reported).
+      // Queued a frame out so this runs after Quill's own re-render from
+      // the insert, not before it.
+      requestAnimationFrame(() => {
+        editor.root.querySelector(`img[src="${CSS.escape(url)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+      });
+    } catch (err) {
       // Best-effort in the sense that a failed upload never corrupts or
       // blocks the rest of the entry the user was typing -- but the
       // failure itself is now surfaced, not swallowed.
-      onUploadError?.("Couldn't upload that image. Please try again.");
+      const detail = err instanceof Error ? err.message : String(err);
+      onUploadError?.(`Couldn't upload that image: ${detail}`);
     } finally {
       isUploadingRef.current = false;
       setIsUploading(false);
@@ -222,6 +236,18 @@ export default function TilRichTextField({
           padding: "12px 15px",
           overflowWrap: "break-word",
           color: "#fff !important",
+        },
+        // TilWhatContent (the read-only view) already constrains images --
+        // the live editor never got the same rule, so an inserted image at
+        // its original resolution (e.g. a full screenshot) could render far
+        // taller than the editor's own visible area with nothing to shrink
+        // it, which looked exactly like the upload had silently failed.
+        "& .ql-editor img": {
+          maxWidth: "100%",
+          height: "auto",
+          display: "block",
+          borderRadius: 4,
+          margin: "0.5em 0",
         },
         // Quill's placeholder defaults to italic -- none of this app's other
         // fields do that (see the Who/Where placeholders beside this one),

@@ -40,6 +40,31 @@ describe("sanitizeTilHtml", () => {
   it("drops a javascript: link", () => {
     expect(sanitizeTilHtml('<a href="javascript:alert(1)">bad</a>')).not.toContain("javascript:");
   });
+
+  it("keeps an img's src and alt", () => {
+    const html = '<img src="https://wso2.com/x.png" alt="a screenshot">';
+    const result = sanitizeTilHtml(html);
+    expect(result).toContain('src="https://wso2.com/x.png"');
+    expect(result).toContain('alt="a screenshot"');
+  });
+
+  it("strips a disallowed attribute (onerror) on an img but keeps the element", () => {
+    const result = sanitizeTilHtml('<img src="https://wso2.com/x.png" onerror="alert(1)">');
+    expect(result).not.toContain("onerror");
+    expect(result).toContain("<img");
+  });
+
+  it("drops a javascript: img src", () => {
+    expect(sanitizeTilHtml('<img src="javascript:alert(1)">')).not.toContain("javascript:");
+  });
+
+  it("drops a data: img src", () => {
+    // ALLOWED_URI_REGEXP only permits http(s)/mailto/tel -- data: URIs
+    // (base64-embedded images) are excluded on purpose, same reasoning as
+    // the backend sanitizer: real storage via POST /uploads, not inline
+    // data blowing past the length limit and bloating storage.
+    expect(sanitizeTilHtml('<img src="data:image/png;base64,aGVsbG8=">')).not.toContain("data:");
+  });
 });
 
 describe("isEmptyTilHtml", () => {
