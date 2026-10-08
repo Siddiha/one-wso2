@@ -14,10 +14,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
-import { Box, useTheme } from "@wso2/oxygen-ui";
+import { Box, IconButton, Tooltip, Typography, useTheme } from "@wso2/oxygen-ui";
+import { TrashIcon } from "@wso2/oxygen-ui-icons-react";
 import { sanitizeTilHtml } from "../util/tilRichText";
 
 // react-quill-new, same as every other One WSO2 rich-text field -- draft-js
@@ -63,6 +64,19 @@ export default function TilRichTextField({
 }) {
   const theme = useTheme();
   const quillRef = useRef<ReactQuill>(null);
+  // Wraps the whole editor (toolbar + ql-container) -- the resize/delete
+  // overlay below is positioned absolutely against THIS box, not the page,
+  // so it tracks the image correctly even inside a scrolled dialog.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  // The <img> element currently selected (clicked) in the editor, and
+  // where to float the resize/delete overlay for it. Two different
+  // notions of "selected" exist here on purpose: Quill's OWN native
+  // embed selection (blue outline, lets Backspace delete it) keeps
+  // working untouched -- this is purely a second, additive affordance,
+  // since clicking an image gave no visible way to resize or remove it
+  // otherwise.
+  const [selectedImg, setSelectedImg] = useState<HTMLImageElement | null>(null);
+  const [overlayPos, setOverlayPos] = useState<{ top: number; left: number } | null>(null);
   // Only one upload accepted at a time -- re-entrant calls are ignored.
   //
   // Does NOT also make the editor read-only for the upload's duration
@@ -157,6 +171,102 @@ export default function TilRichTextField({
     return () => root.removeEventListener("paste", handlePaste);
   }, []);
 
+  // Reads back the editor's live DOM as HTML and pushes it out through
+  // onChange -- the same "DOM is the source of truth, HTML round-trips
+  // back out" posture uploadAndInsert already relies on. Needed here
+  // because resize/delete below mutate the <img> element directly
+  // rather than through a Quill API call, so nothing else would ever
+  // tell onChange a change happened.
+  const commitChange = () => {
+    const editor = quillRef.current?.getEditor();
+    if (!editor) return;
+    onChange(sanitizeTilHtml(editor.root.innerHTML));
+  };
+
+  // Selects an image on click so the overlay below can target it --
+  // deliberately NOT preventDefault/stopPropagation, so Quill's own
+  // native embed selection (and therefore Backspace-to-delete) keeps
+  // working exactly as it did before this existed.
+  useEffect(() => {
+    const root = quillRef.current?.getEditor().root;
+    if (!root || disabled) return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      setSelectedImg(target.tagName === "IMG" ? (target as HTMLImageElement) : null);
+    };
+    root.addEventListener("click", handleClick);
+    return () => root.removeEventListener("click", handleClick);
+  }, [disabled]);
+
+  // Clicking anywhere outside the editor+overlay deselects -- without
+  // this, clicking into the Title field with an image still "selected"
+  // left the overlay floating over content it no longer has any real
+  // claim to be anchored to.
+  useEffect(() => {
+    if (!selectedImg) return;
+    const handleDocMouseDown = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setSelectedImg(null);
+      }
+    };
+    document.addEventListener("mousedown", handleDocMouseDown);
+    return () => document.removeEventListener("mousedown", handleDocMouseDown);
+  }, [selectedImg]);
+
+  // Disabling the field (view-only mode) drops any live selection --
+  // nothing should float a resize/delete overlay over read-only content.
+  useEffect(() => {
+    if (disabled) setSelectedImg(null);
+  }, [disabled]);
+
+  // Tracks the selected image's position so the overlay stays pinned to
+  // it across scrolling/resizing. Also the one place that notices a
+  // selected image has been detached from the document entirely (e.g.
+  // the editor's content was reset out from under it) and clears the
+  // stale selection rather than floating an overlay over nothing.
+  useEffect(() => {
+    if (!selectedImg || !wrapperRef.current) {
+      setOverlayPos(null);
+      return;
+    }
+    const update = () => {
+      if (!wrapperRef.current || !document.contains(selectedImg)) {
+        setSelectedImg(null);
+        return;
+      }
+      const imgRect = selectedImg.getBoundingClientRect();
+      const wrapRect = wrapperRef.current.getBoundingClientRect();
+      setOverlayPos({ top: imgRect.top - wrapRect.top, left: imgRect.left - wrapRect.left });
+    };
+    update();
+    const root = quillRef.current?.getEditor().root;
+    root?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    return () => {
+      root?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [selectedImg]);
+
+  // Width presets rather than a drag handle -- a free-drag resize needs
+  // its own mousemove/mouseup tracking and aspect-ratio math for not
+  // much real benefit here (this is a feed-preview image, not a design
+  // tool); three fixed widths cover "too big"/"fine"/"back to full size"
+  // with far less that can go wrong.
+  const resizeSelectedImage = (percent: number) => {
+    if (!selectedImg) return;
+    selectedImg.style.width = `${percent}%`;
+    selectedImg.style.height = "auto";
+    commitChange();
+  };
+
+  const deleteSelectedImage = () => {
+    if (!selectedImg) return;
+    selectedImg.remove();
+    setSelectedImg(null);
+    commitChange();
+  };
+
   // Quill's own snow theme never sets a `title` on its toolbar buttons --
   // each one is just an icon with no accessible name and no hover tooltip,
   // which is why none of them say what they do. Set directly on the DOM
@@ -208,9 +318,11 @@ export default function TilRichTextField({
 
   return (
     <Box
+      ref={wrapperRef}
       sx={{
         height: "100%",
         display: "flex",
+        position: "relative",
         "& .quill": {
           display: "flex",
           flexDirection: "column",
@@ -308,6 +420,49 @@ export default function TilRichTextField({
         formats={FORMATS}
         readOnly={disabled}
       />
+      {selectedImg && overlayPos && !disabled && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: overlayPos.top + 6,
+            left: overlayPos.left + 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            bgcolor: "rgba(0, 0, 0, 0.75)",
+            borderRadius: 1,
+            p: 0.25,
+            zIndex: 2,
+          }}
+        >
+          <Tooltip title="Small">
+            <IconButton size="small" onClick={() => resizeSelectedImage(25)} sx={{ color: "#fff" }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                S
+              </Typography>
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Medium">
+            <IconButton size="small" onClick={() => resizeSelectedImage(50)} sx={{ color: "#fff" }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                M
+              </Typography>
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Full width">
+            <IconButton size="small" onClick={() => resizeSelectedImage(100)} sx={{ color: "#fff" }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                L
+              </Typography>
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Remove image">
+            <IconButton size="small" onClick={deleteSelectedImage} sx={{ color: "#fff" }}>
+              <TrashIcon size={14} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
     </Box>
   );
 }
