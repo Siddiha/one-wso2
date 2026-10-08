@@ -51,6 +51,11 @@ import type { MenuApp, MenuAppItem } from "@constants/appMenu";
 export const DOWNLOAD_STATS_DESCRIPTION =
   "Download activity and repository stats across all WSO2 products.";
 
+// The h1 on every screen. The rail, a pin and the launcher keep the shorter
+// name on the app below. The two differ on purpose: the rail stays short, and
+// the page names the product.
+export const DOWNLOAD_STATS_HEADING = "GitHub Product Download Stats";
+
 /** Root of every Download Stats route: perspective / app. */
 export const DOWNLOAD_STATS_PATH = "/engineering/download-stats";
 

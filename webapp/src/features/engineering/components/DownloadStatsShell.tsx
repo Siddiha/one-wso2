@@ -22,6 +22,7 @@ import RoutedTabs, { type RoutedTabDef } from "@components/routed-tabs/RoutedTab
 import {
   DOWNLOAD_STATS_APPS,
   DOWNLOAD_STATS_DESCRIPTION,
+  DOWNLOAD_STATS_HEADING,
   DOWNLOAD_STATS_PATH,
   DOWNLOAD_STATS_SCREENS,
   ENGINEERING_ADMIN_ITEM_ID,
@@ -35,8 +36,8 @@ import {
 } from "../api/productDownloadStats";
 
 // Shared page frame for every Download Stats screen. The title above the tab
-// bar names the app, and one sentence sits under that title on every screen,
-// the way Banking does. The tab bar names the screen. A
+// bar is the product name, and one sentence sits under that title on every
+// screen, the way Banking does. The tab bar names the screen. A
 // screen's own name is a heading only while its tab is hidden (Admin, until
 // the API has said the caller is an Admin). The shell exists so ONE place owns every
 // degraded state and no screen has to remember them (MisShell is the
@@ -62,17 +63,13 @@ import {
 // a body component, and the body holds every query hook. That is load-bearing
 // rather than tidy: `children` is mounted only on the last rung, so a body
 // inside the shell cannot send a request while the API address is unset or
-// the reader is being refused. The heading is the app name from the registry,
-// the same name the rail row and a pin's qualifier use. The sentence under
-// it is the one shared description, not a per-screen label.
+// the reader is being refused. The heading is the product name. The rail, a
+// pin and the launcher keep the shorter registry name. The sentence under
+// the heading is the one shared description, not a per-screen label.
 //
 // `actions` (a button beside the description, as Admin's "Add tracked repository")
 // belongs to the screen, so it appears on the last rung only: a refused reader
 // is not offered an action on a screen they cannot open.
-
-// The registry holds one app. Its name is the page heading, so the rail, a
-// pin, and this title cannot spell the app two ways.
-const appName = DOWNLOAD_STATS_APPS[0].name;
 
 // Tab order is the registry order. Admin is last, and only present once the
 // API has said the caller is an Admin — the same rule the rail used when
@@ -138,7 +135,7 @@ export default function DownloadStatsShell({
       >
         <Box sx={{ minWidth: 0 }}>
           <Typography component="h1" variant="h5" sx={{ mb: 0.5, mt: 0 }}>
-            {appName}
+            {DOWNLOAD_STATS_HEADING}
           </Typography>
           <PerspectiveHeader
             title={namedByTab ? undefined : title}

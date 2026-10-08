@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 import {
   DOWNLOAD_STATS_APPS,
   DOWNLOAD_STATS_DESCRIPTION,
+  DOWNLOAD_STATS_HEADING,
   DOWNLOAD_STATS_PATH,
   DOWNLOAD_STATS_SCREENS,
   ENGINEERING_ADMIN_ITEM_ID,
@@ -34,6 +35,7 @@ describe("the Download Stats registry", () => {
   it("is one app named Download Stats, offered as one rail row", () => {
     expect(DOWNLOAD_STATS_APPS).toHaveLength(1);
     expect(app.name).toBe("Download Stats");
+    expect(DOWNLOAD_STATS_HEADING).toBe("GitHub Product Download Stats");
     expect(app.inTabs).toBe(true);
     expect(app.icon).toBeDefined();
   });
