@@ -82,11 +82,18 @@ export default function TilHomePage() {
 
   const canModerate = userInfo.data?.canModerate ?? false;
   const myEmail = userInfo.data?.email;
+  // Shared by the "My entries" filter below AND canDelete further down --
+  // both are "is this my entry" checks and must agree, or an entry can show
+  // up under My entries (this comparison) while its own Delete button stays
+  // disabled (a separate, exact-match comparison that doesn't agree with
+  // it) whenever the two addresses differ only in case.
+  const isOwnEntry = (submittedByEmail: string) =>
+    Boolean(myEmail) && submittedByEmail.toLowerCase() === myEmail?.toLowerCase();
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return (submissions.data?.items ?? []).filter((s) => {
-      if (tab === "mine" && s.submittedByEmail.toLowerCase() !== myEmail?.toLowerCase()) return false;
+      if (tab === "mine" && !isOwnEntry(s.submittedByEmail)) return false;
       const day = localDateString(s.createdAt);
       if (dateFrom && day < dateFrom) return false;
       if (dateTo && day > dateTo) return false;
@@ -275,7 +282,7 @@ export default function TilHomePage() {
               <SubmissionCard
                 key={s.id}
                 submission={s}
-                canDelete={canModerate || (Boolean(myEmail) && s.submittedByEmail === myEmail)}
+                canDelete={canModerate || isOwnEntry(s.submittedByEmail)}
                 deleting={deletingId === s.id}
                 onDelete={() => confirmDelete(s.id)}
                 onOpen={() => navigate(`/knowledge-base/${s.id}`)}
