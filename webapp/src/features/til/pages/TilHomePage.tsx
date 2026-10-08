@@ -53,6 +53,19 @@ function localDateString(date: Date): string {
 
 const ENTRIES_PER_PAGE = 10;
 
+// Shared by the "My entries" filter and canDelete below -- both are "is
+// this my entry" checks and must agree, or an entry can show up under My
+// entries (this comparison) while its own Delete button stays disabled (a
+// separate, exact-match comparison that doesn't agree with it) whenever
+// the two addresses differ only in case. Module scope, not a closure
+// inside the component, specifically so it isn't a new function identity
+// every render -- useMemo's dependency array below depends on primitives
+// only (myEmail, a string), not on this function, which an in-component
+// closure would otherwise need to be listed as too.
+function isOwnEntry(submittedByEmail: string, myEmail: string | undefined): boolean {
+  return Boolean(myEmail) && submittedByEmail.toLowerCase() === myEmail?.toLowerCase();
+}
+
 // Today I Learned: a company-wide feed of learnings from customers, partners,
 // and internal sources, plus the form to add one. A Google Chat App's "+"
 // Dialog is a second way to post an entry, calling the same
@@ -82,18 +95,11 @@ export default function TilHomePage() {
 
   const canModerate = userInfo.data?.canModerate ?? false;
   const myEmail = userInfo.data?.email;
-  // Shared by the "My entries" filter below AND canDelete further down --
-  // both are "is this my entry" checks and must agree, or an entry can show
-  // up under My entries (this comparison) while its own Delete button stays
-  // disabled (a separate, exact-match comparison that doesn't agree with
-  // it) whenever the two addresses differ only in case.
-  const isOwnEntry = (submittedByEmail: string) =>
-    Boolean(myEmail) && submittedByEmail.toLowerCase() === myEmail?.toLowerCase();
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return (submissions.data?.items ?? []).filter((s) => {
-      if (tab === "mine" && !isOwnEntry(s.submittedByEmail)) return false;
+      if (tab === "mine" && !isOwnEntry(s.submittedByEmail, myEmail)) return false;
       const day = localDateString(s.createdAt);
       if (dateFrom && day < dateFrom) return false;
       if (dateTo && day > dateTo) return false;
@@ -282,7 +288,7 @@ export default function TilHomePage() {
               <SubmissionCard
                 key={s.id}
                 submission={s}
-                canDelete={canModerate || isOwnEntry(s.submittedByEmail)}
+                canDelete={canModerate || isOwnEntry(s.submittedByEmail, myEmail)}
                 deleting={deletingId === s.id}
                 onDelete={() => confirmDelete(s.id)}
                 onOpen={() => navigate(`/knowledge-base/${s.id}`)}

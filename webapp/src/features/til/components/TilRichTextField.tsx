@@ -19,6 +19,7 @@ import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { Box, IconButton, Tooltip, Typography, useTheme } from "@wso2/oxygen-ui";
 import { TrashIcon } from "@wso2/oxygen-ui-icons-react";
+import { describeError } from "../util/tilError";
 import { sanitizeTilHtml } from "../util/tilRichText";
 
 // react-quill-new, same as every other One WSO2 rich-text field -- draft-js
@@ -137,9 +138,12 @@ export default function TilRichTextField({
     } catch (err) {
       // Best-effort in the sense that a failed upload never corrupts or
       // blocks the rest of the entry the user was typing -- but the
-      // failure itself is now surfaced, not swallowed.
-      const detail = err instanceof Error ? err.message : String(err);
-      onUploadError?.(`Couldn't upload that image: ${detail}`);
+      // failure itself is now surfaced, not swallowed. Routed through
+      // describeError, same as every other error in this dialog -- a raw
+      // err.message can be an HTTP status line, a URL fragment, or a
+      // backend-internal message, none of which belong in a user-facing
+      // toast as-is.
+      onUploadError?.(`Couldn't upload that image: ${describeError(err)}`);
     } finally {
       isUploadingRef.current = false;
       onUploadingChange?.(false);
@@ -256,10 +260,10 @@ export default function TilRichTextField({
   const resizeSelectedImage = (percent: number) => {
     if (!selectedImg) return;
     // A plain HTML "width" attribute, not an inline style -- sanitizeTilHtml
-    // (and til-backend's own sanitize_what_html) allowlist specific
-    // ATTRIBUTES, not "style" wholesale, so a resize set via .style.width
-    // was silently stripped the moment this change round-tripped through
-    // either sanitizer, snapping the image back to full size right after
+    // (and the backend's own sanitizer) allowlist specific ATTRIBUTES, not
+    // "style" wholesale, so a resize set via .style.width was silently
+    // stripped the moment this change round-tripped through either
+    // sanitizer, snapping the image back to full size right after
     // (confirmed: ALLOWED_ATTR never included "style"). No explicit height
     // needed -- the browser preserves aspect ratio from width alone, same
     // as the editor's own ".ql-editor img { height: auto }" rule already

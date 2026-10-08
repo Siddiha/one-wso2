@@ -32,8 +32,8 @@ const SANITIZE_CONFIG = {
   // "width" (not "style") backs the editor's resize overlay -- a plain HTML
   // dimension attribute, not a CSS property string, so there's no style-
   // based injection surface (background: url(...), position: fixed, etc.)
-  // the way allowing "style" outright would open up. til-backend's own
-  // sanitize.py mirrors this same addition -- see its own comment on why.
+  // the way allowing "style" outright would open up. The backend sanitizer
+  // allows the same attribute, for the same reason.
   ALLOWED_ATTR: ["href", "target", "src", "alt", "width"],
   ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 };

@@ -59,7 +59,7 @@ const WHERE_OPTIONS_NEEDING_DETAIL: readonly TilWhere[] = ["Customer", "Partner"
 // internally-gated branch, confirmed against a standalone repro using the
 // same MUI/oxygen-ui build before being applied here. Used by the Customer
 // field below -- Partner is plain free-text (no backing search service
-// exists for it the way entity-service backs Customer), so it never needed
+// exists for it the way the Customer field has one), so it never needed
 // this component, but the loading/empty props stay generic in case another
 // Autocomplete field needs the same workaround later.
 //
