@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import { Box, useTheme } from "@wso2/oxygen-ui";
@@ -63,14 +63,23 @@ export default function TilRichTextField({
 }) {
   const theme = useTheme();
   const quillRef = useRef<ReactQuill>(null);
-  // Only one upload accepted at a time (isUploadingRef guards re-entrancy),
-  // and the editor itself goes read-only for the duration (readOnly={...
-  // isUploading} below) -- together these mean the selection index captured
-  // before the upload started can never go stale from the user typing in
-  // the meantime, which was the other half of the race condition this
-  // closes (insertEmbed landing at the wrong position after an edit).
+  // Only one upload accepted at a time -- re-entrant calls are ignored.
+  //
+  // Does NOT also make the editor read-only for the upload's duration
+  // (an earlier version did) -- that toggle caused a real, worse bug:
+  // react-quill-new's shouldComponentUpdate compares the incoming `value`
+  // prop against Quill's OWN current DOM content on every prop change,
+  // including when readOnly flips, and force-resets the editor from the
+  // HTML string via setEditorContents() if they don't match exactly. That
+  // reset path re-parses HTML rather than trusting insertEmbed's native
+  // result, and reliably dropped the just-inserted image -- confirmed
+  // directly by removing the readOnly toggle and watching uploads start
+  // working again. The trade-off this reopens: if the user types during an
+  // upload, the selection index captured before it started can go stale,
+  // and insertEmbed can land at the wrong position. Accepted as the lesser
+  // problem -- a mispositioned image is recoverable, a 100%-reproducible
+  // silent upload failure is not.
   const isUploadingRef = useRef(false);
-  const [isUploading, setIsUploading] = useState(false);
 
   // Shared by the toolbar's image button and by pasting an image file
   // directly -- both end up with a File and a cursor position to insert at.
@@ -93,7 +102,6 @@ export default function TilRichTextField({
     }
     const range = editor.getSelection(true);
     isUploadingRef.current = true;
-    setIsUploading(true);
     onUploadingChange?.(true);
     try {
       const url = await onUploadImage(file);
@@ -120,7 +128,6 @@ export default function TilRichTextField({
       onUploadError?.(`Couldn't upload that image: ${detail}`);
     } finally {
       isUploadingRef.current = false;
-      setIsUploading(false);
       onUploadingChange?.(false);
     }
   };
@@ -299,7 +306,7 @@ export default function TilRichTextField({
         placeholder={placeholder}
         modules={modules}
         formats={FORMATS}
-        readOnly={disabled || isUploading}
+        readOnly={disabled}
       />
     </Box>
   );
