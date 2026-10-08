@@ -991,7 +991,9 @@ export default function App() {
               Diligence, alongside Finance (see the finance/ routes below and
               DUE_DILIGENCE_APPS). */}
           <Route path="legal" element={<PerspectiveLanding />} />
-          <Route path="legal/nda" element={<NdaPage />} />
+          {/* Behind the same preview flag as its rail entry, so the page is not
+              reachable by URL either. */}
+          {isPreviewEnabled("nda") && <Route path="legal/nda" element={<NdaPage />} />}
           {/* Security — the GRC platform's Risk Hub and Admin Console, lifted
               from grc-tools rather than rewritten. The two route fragments are
               the SOURCE's own (modules/{risk,audit,admin}/routes.tsx), spread

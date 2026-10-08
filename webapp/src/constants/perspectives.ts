@@ -701,12 +701,16 @@ export const PERSPECTIVES: readonly PerspectiveDef[] = [
     path: "/legal",
     forwardsToFirstItem: true,
     sections: [
-      {
-        id: "legal-nda",
-        label: "NDA",
-        icon: FileSignatureIcon,
-        path: "/legal/nda",
-      },
+      ...(isPreviewEnabled("nda")
+        ? [
+            {
+              id: "legal-nda",
+              label: "NDA",
+              icon: FileSignatureIcon,
+              path: "/legal/nda",
+            },
+          ]
+        : []),
       ...appsToSections(DUE_DILIGENCE_APPS),
     ],
   },

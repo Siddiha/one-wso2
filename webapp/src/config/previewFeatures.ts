@@ -102,6 +102,12 @@ export type PreviewFeature =
    */
   | "cado2"
   /**
+   * Legal → NDA, the PDF generator — its rail entry and the `/legal/nda`
+   * route. Held back until it is ready for production. Due Diligence, the
+   * rest of the Legal perspective, is unaffected.
+   */
+  | "nda"
+  /**
    * The whole Knowledge Base perspective — waffle tile, rail, and the
    * `/knowledge-base` route, currently just Today I Learned. Waiting on
    * til-backend's first real Choreo deployment and the Google Chat App's
