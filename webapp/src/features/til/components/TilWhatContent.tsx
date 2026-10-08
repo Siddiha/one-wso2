@@ -32,6 +32,7 @@ export default function TilWhatContent({ html, variant = "body2" }: { html: stri
         "& ul > li": { listStyleType: "disc" },
         "& ol > li": { listStyleType: "decimal" },
         "& p": { my: "0.4em" },
+        "& img": { maxWidth: "100%", borderRadius: 1, my: "0.5em", display: "block" },
       }}
       dangerouslySetInnerHTML={{ __html: sanitizeTilHtml(html) }}
     />

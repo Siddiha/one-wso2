@@ -28,13 +28,27 @@ import DOMPurify from "dompurify";
 // read by every OTHER employee who opens the feed, so the read side never
 // trusts that the editor sanitized it either.
 const SANITIZE_CONFIG = {
-  ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "ol", "ul", "li", "a"],
-  ALLOWED_ATTR: ["href", "target"],
+  ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "ol", "ul", "li", "a", "img"],
+  // "width" (not "style") backs the editor's resize overlay -- a plain HTML
+  // dimension attribute, not a CSS property string, so there's no style-
+  // based injection surface (background: url(...), position: fixed, etc.)
+  // the way allowing "style" outright would open up. The backend sanitizer
+  // allows the same attribute, for the same reason.
+  ALLOWED_ATTR: ["href", "target", "src", "alt", "width"],
   ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 };
 
+// DOMPurify special-cases img/video/audio/source src to allow a data: URI
+// REGARDLESS of ALLOWED_URI_REGEXP above (long-documented DOMPurify
+// behavior -- confirmed directly: the regex alone does not block it).
+// Stripped as a second pass for the same reason the backend's own
+// sanitizer never allows it either -- real storage via POST /uploads, not
+// an inline blob that could blow past WHAT_MAX_LENGTH and bloat storage.
+const _DATA_URI_IMG_RE = /<img\b[^>]*\bsrc="data:[^"]*"[^>]*>/gi;
+
 export function sanitizeTilHtml(html: string): string {
-  return DOMPurify.sanitize(html, SANITIZE_CONFIG);
+  const cleaned = DOMPurify.sanitize(html, SANITIZE_CONFIG);
+  return cleaned.replace(_DATA_URI_IMG_RE, "");
 }
 
 // Converts to plain text for the two things that must count characters, not
@@ -68,7 +82,11 @@ export function isEmptyTilHtml(html: string): boolean {
   return tilPlainText(html) === "";
 }
 
-const EXCERPT_LENGTH = 180;
+// Raised from 180 (~1 line at the feed card's width) to give a real 2-3
+// line preview instead of a single truncated line -- SubmissionCard clamps
+// the rendered text to 3 lines via CSS regardless, so this just controls
+// how much text is available to fill them.
+const EXCERPT_LENGTH = 480;
 
 /** A plain-text preview for the feed list — formatting (bold, lists) is
  * what's lost in a one-line excerpt anyway, so this trims at a word

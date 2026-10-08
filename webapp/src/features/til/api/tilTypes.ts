@@ -33,6 +33,9 @@ export function isTilWhere(value: string): value is TilWhere {
 }
 
 export const TIL_WHAT_MAX_LENGTH = 5000;
+export const TIL_TITLE_MAX_LENGTH = 100;
+export const TIL_WHERE_DETAIL_MAX_LENGTH = 200;
+export const TIL_WHO_MAX_LENGTH = 200;
 
 // --- wire --------------------------------------------------------------
 
@@ -45,6 +48,7 @@ export interface TilUserInfoWire {
 
 export interface TilSubmissionWire {
   id: string;
+  title: string;
   who: string;
   where: TilWhere;
   /** The customer/partner's name — present when `where` is "Customer" or "Partner". */
@@ -64,6 +68,7 @@ export interface TilSubmissionsPageWire {
 
 export interface TilSubmission {
   id: string;
+  title: string;
   who: string;
   where: TilWhere;
   whereDetail: string | null;
@@ -74,6 +79,7 @@ export interface TilSubmission {
 }
 
 export interface TilSubmissionPayload {
+  title: string;
   who: string;
   where: TilWhere;
   /** Required by the backend when `where` is "Customer" or "Partner", omitted otherwise. */

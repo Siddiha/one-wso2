@@ -70,16 +70,31 @@ export default function SubmissionCard({
         }),
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
-            {submission.who}
-          </Typography>
-          <Chip
-            label={submission.whereDetail ? `${submission.where} — ${submission.whereDetail}` : submission.where}
-            size="small"
-            variant="outlined"
-          />
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+        <Box sx={{ minWidth: 0 }}>
+          {/* Old entries predate the title field (backend default: "") --
+              falling back to the who/where line alone for those, rather
+              than showing an empty heading above it. */}
+          {submission.title && (
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              {submission.title}
+            </Typography>
+          )}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: submission.title ? 0.25 : 0 }}>
+            <Typography
+              variant={submission.title ? "caption" : "subtitle2"}
+              color={submission.title ? "text.secondary" : "text.primary"}
+              sx={submission.title ? undefined : { fontWeight: 700 }}
+              noWrap
+            >
+              Submitted by {submission.who}
+            </Typography>
+            <Chip
+              label={submission.whereDetail ? `${submission.where} — ${submission.whereDetail}` : submission.where}
+              size="small"
+              variant="outlined"
+            />
+          </Box>
         </Box>
         {canDelete && (
           <Tooltip title="Delete this entry">
@@ -101,7 +116,17 @@ export default function SubmissionCard({
           </Tooltip>
         )}
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-word" }}>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        sx={{
+          wordBreak: "break-word",
+          display: "-webkit-box",
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}
+      >
         {tilExcerpt(submission.what)}
       </Typography>
       <Typography variant="caption" color="text.secondary">

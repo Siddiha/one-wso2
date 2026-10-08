@@ -32,8 +32,14 @@ import type { PaperProps } from "@wso2/oxygen-ui";
 import { dialogPaperSx } from "@components/confirmation-dialog/dialogPaperSx";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import { useCustomerSearch, useTilUserInfo } from "../api/useTilData";
-import { useCreateTilSubmission } from "../api/useTilMutations";
-import { TIL_WHAT_MAX_LENGTH, TIL_WHERE_OPTIONS, type TilWhere } from "../api/tilTypes";
+import { useCreateTilSubmission, useUploadTilImage } from "../api/useTilMutations";
+import {
+  TIL_TITLE_MAX_LENGTH,
+  TIL_WHAT_MAX_LENGTH,
+  TIL_WHERE_DETAIL_MAX_LENGTH,
+  TIL_WHERE_OPTIONS,
+  type TilWhere,
+} from "../api/tilTypes";
 import { describeError } from "../util/tilError";
 import { isEmptyTilHtml, tilPlainTextLength } from "../util/tilRichText";
 import TilRichTextField from "./TilRichTextField";
@@ -51,7 +57,11 @@ const WHERE_OPTIONS_NEEDING_DETAIL: readonly TilWhere[] = ["Customer", "Partner"
 // at all, which is what every prior bug report actually showed. This paper
 // slot renders our own fallback text instead of relying on that
 // internally-gated branch, confirmed against a standalone repro using the
-// same MUI/oxygen-ui build before being applied here.
+// same MUI/oxygen-ui build before being applied here. Used by the Customer
+// field below -- Partner is plain free-text (no backing search service
+// exists for it the way the Customer field has one), so it never needed
+// this component, but the loading/empty props stay generic in case another
+// Autocomplete field needs the same workaround later.
 //
 // Defined at module scope (not inside SubmitEntryDialog) and taking
 // loading/empty as props rather than closing over component state -- a
@@ -59,21 +69,23 @@ const WHERE_OPTIONS_NEEDING_DETAIL: readonly TilWhere[] = ["Customer", "Partner"
 // NEW component type on every render, which made MUI unmount/remount the
 // Popper's own Paper (losing scroll position, flickering the list) on
 // every keystroke.
-function CustomerAutocompletePaper({
+function TilAutocompletePaper({
   children,
   loading,
+  loadingLabel,
   empty,
+  emptyLabel,
   ...paperProps
-}: PaperProps & { loading?: boolean; empty?: boolean }) {
+}: PaperProps & { loading?: boolean; loadingLabel?: string; empty?: boolean; emptyLabel?: string }) {
   return (
     <Paper {...paperProps}>
       {loading ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>
-          Searching customers…
+          {loadingLabel}
         </Typography>
       ) : empty ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>
-          No matching customer — you can still use this name
+          {emptyLabel}
         </Typography>
       ) : (
         children
@@ -82,12 +94,24 @@ function CustomerAutocompletePaper({
   );
 }
 
+// No searchable partner list exists the way Customer has one (see
+// useCustomerSearch) -- no backing service tracks partner organizations as
+// a standalone, searchable list. Plain free-text instead of an
+// Autocomplete with suggestions (see the Partner field below).
+
+// Shared by all three whereDetail variants (Customer/Partner/Other) --
+// whereDetailInvalid now covers two different problems (empty, or over the
+// length limit), and "Required" was misleading for the second one.
+function whereDetailErrorText(value: string): string {
+  return value.trim().length === 0 ? "Required" : `Must be ${TIL_WHERE_DETAIL_MAX_LENGTH} characters or fewer`;
+}
+
 function whereDetailCopy(where: TilWhere): { label: string; placeholder: string; helper: string } {
   switch (where) {
     case "Customer":
-      return { label: "Customer name", placeholder: "e.g. Acme Corp", helper: "Which customer" };
+      return { label: "Customer name", placeholder: "e.g. Acme Corp", helper: "" };
     case "Partner":
-      return { label: "Partner name", placeholder: "e.g. Acme Reseller", helper: "Which partner" };
+      return { label: "Partner name", placeholder: "e.g. Acme Reseller", helper: "" };
     default:
       return {
         label: "Please explain",
@@ -102,11 +126,18 @@ function whereDetailCopy(where: TilWhere): { label: string; placeholder: string;
 // product — see the backend's openapi.yaml for the shared contract.
 export default function SubmitEntryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const userInfo = useTilUserInfo();
+  const [title, setTitle] = useState("");
   const [where, setWhere] = useState<TilWhere | "">("");
   const [whereDetail, setWhereDetail] = useState("");
   const [what, setWhat] = useState("");
   const [touched, setTouched] = useState(false);
   const create = useCreateTilSubmission();
+  const uploadImage = useUploadTilImage();
+  // True while TilRichTextField has an image upload in flight -- blocks
+  // Share so a submission can never go out missing an image the user
+  // thought they'd just attached (see TilRichTextField's onUploadingChange
+  // for the full race condition this closes).
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   // Only searches real customer records -- Partner/Other keep plain
   // free-text entry (no equivalent searchable list exists for them). null
   // (not "") when where !== "Customer" so useCustomerSearch knows the field
@@ -129,22 +160,30 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
   const { showSuccess, showError } = useNotifications();
 
   // The byline is the signed-in user's own name — never typed, so it can't
-  // be used to credit (or blame) someone else. submittedByEmail is this same
-  // identity on the backend side, independently; this is just how it reads.
-  const who = userInfo.data ? `${userInfo.data.displayName} (${userInfo.data.email})` : "";
+  // be used to credit (or blame) someone else. Name only, not "(email)" --
+  // the email added nothing a reader couldn't already tell from the name,
+  // and submittedByEmail already carries it independently on the backend
+  // side for anything that actually needs it (e.g. the delete-your-own-
+  // entry check), so the public byline doesn't need to repeat it.
+  const who = userInfo.data ? userInfo.data.displayName : "";
   const whoInvalid = !userInfo.data;
+  const titleInvalid = title.trim().length === 0 || title.trim().length > TIL_TITLE_MAX_LENGTH;
   const whereInvalid = where === "";
   const needsWhereDetail = where !== "" && WHERE_OPTIONS_NEEDING_DETAIL.includes(where);
-  const whereDetailInvalid = needsWhereDetail && whereDetail.trim().length === 0;
+  const whereDetailInvalid =
+    needsWhereDetail &&
+    (whereDetail.trim().length === 0 || whereDetail.trim().length > TIL_WHERE_DETAIL_MAX_LENGTH);
   const whatLength = tilPlainTextLength(what);
   const whatInvalid = isEmptyTilHtml(what) || whatLength > TIL_WHAT_MAX_LENGTH;
-  const invalid = whoInvalid || whereInvalid || whereDetailInvalid || whatInvalid;
+  const invalid = whoInvalid || titleInvalid || whereInvalid || whereDetailInvalid || whatInvalid || isUploadingImage;
 
   const reset = () => {
+    setTitle("");
     setWhere("");
     setWhereDetail("");
     setWhat("");
     setTouched(false);
+    setIsUploadingImage(false);
     create.reset();
   };
 
@@ -158,6 +197,7 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
     if (invalid) return;
     create.mutate(
       {
+        title: title.trim(),
         who,
         where: where as TilWhere,
         what,
@@ -193,23 +233,10 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
             the border otherwise, which reads as misaligned even though
             each one is individually correct. Same pattern "What did you
             learn?" already uses on the right. */}
-        <Stack spacing={2} sx={{ width: "25%", minWidth: 220 }}>
-          <Typography variant="body2" color="text.secondary">
-            Your name is recorded along with your entry.
-          </Typography>
-          <Stack spacing={0.5}>
-            <Typography variant="subtitle2">Who</Typography>
-            <TextField
-              value={userInfo.isLoading ? "Loading your name…" : who || "Couldn't load your name"}
-              error={touched && whoInvalid}
-              helperText="Your name, shown on this entry"
-              fullWidth
-              disabled
-            />
-          </Stack>
+        <Stack spacing={2} sx={{ width: "25%", minWidth: 220, display: "flex", flexDirection: "column", height: "100%" }}>
           <Stack spacing={0.5}>
             <Typography variant="subtitle2" color={touched && whereInvalid ? "error" : "text.primary"}>
-              Where
+              Source
             </Typography>
             <TextField
               select
@@ -222,6 +249,14 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
               helperText={touched && whereInvalid ? "Required" : "Who this learning came from"}
               fullWidth
               autoFocus
+              // The select variant renders its box ~3px taller than a plain
+              // TextField by default (measured directly: 40.125px vs
+              // 37.125px) -- harmless on its own, but this field sits in
+              // the same row as the plain "Title" field on the right, and
+              // the extra height makes the two look misaligned even though
+              // each is individually correct. Pinned to the plain variant's
+              // real measured height so both line up exactly.
+              sx={{ "& .MuiInputBase-root": { height: "37.125px" } }}
             >
               {TIL_WHERE_OPTIONS.map((opt) => (
                 <MenuItem key={opt} value={opt}>
@@ -246,7 +281,7 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
                 filterOptions={(options) => options}
                 options={customerOptions}
                 loading={customerSearch.isLoading}
-                slots={{ paper: CustomerAutocompletePaper }}
+                slots={{ paper: TilAutocompletePaper }}
                 open={customerFieldOpen}
                 inputValue={whereDetail}
                 onInputChange={(_event, next) => setWhereDetail(next)}
@@ -277,7 +312,12 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
                   // other dependency-resolution outcomes do, so the cast is
                   // bridging a type-only gap, not a real runtime one: MUI
                   // still passes these straight through to our component.
-                  paper: { loading: customerSearch.isLoading, empty: customerOptions.length === 0 } as PaperProps,
+                  paper: {
+                    loading: customerSearch.isLoading,
+                    loadingLabel: "Searching customers…",
+                    empty: customerOptions.length === 0,
+                    emptyLabel: "No matching customer — you can still use this name",
+                  } as PaperProps,
                   popper: { style: { zIndex: 1301 }, placement: "bottom-start", modifiers: [{ name: "flip", enabled: false }] },
                   listbox: { sx: { maxHeight: 240 } },
                 }}
@@ -297,7 +337,7 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
                       {...params}
                       placeholder={whereDetailCopy(where).placeholder}
                       error={touched && whereDetailInvalid}
-                      helperText={touched && whereDetailInvalid ? "Required" : whereDetailCopy(where).helper}
+                      helperText={touched && whereDetailInvalid ? whereDetailErrorText(whereDetail) : whereDetailCopy(where).helper}
                       // Chained, not replaced: these are MUI's OWN internal
                       // handlers (anchor/positioning bookkeeping the Popper
                       // needs to render at all) -- overwriting them outright,
@@ -319,7 +359,32 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
               />
             </Stack>
           )}
-          {needsWhereDetail && where !== "Customer" && (
+          {needsWhereDetail && where === "Partner" && (
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2" color={touched && whereDetailInvalid ? "error" : "text.primary"}>
+                {whereDetailCopy(where).label}
+              </Typography>
+              {/* Plain free-text, same as "Other" -- no backing search
+                  service exists for partners the way entity-service backs
+                  Customer, so a static sample list here would just be a
+                  handful of fictional company names a user could select
+                  and submit as a real entry's partner. */}
+              <TextField
+                placeholder={whereDetailCopy(where).placeholder}
+                value={whereDetail}
+                onChange={(e) => setWhereDetail(e.target.value)}
+                error={touched && whereDetailInvalid}
+                helperText={
+                  touched && whereDetailInvalid
+                    ? whereDetailErrorText(whereDetail)
+                    : `${whereDetail.length}/${TIL_WHERE_DETAIL_MAX_LENGTH}`
+                }
+                fullWidth
+                slotProps={{ htmlInput: { maxLength: TIL_WHERE_DETAIL_MAX_LENGTH } }}
+              />
+            </Stack>
+          )}
+          {needsWhereDetail && where === "Other" && (
             <Stack spacing={0.5}>
               <Typography variant="subtitle2" color={touched && whereDetailInvalid ? "error" : "text.primary"}>
                 {whereDetailCopy(where).label}
@@ -329,15 +394,37 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
                 value={whereDetail}
                 onChange={(e) => setWhereDetail(e.target.value)}
                 error={touched && whereDetailInvalid}
-                helperText={touched && whereDetailInvalid ? "Required" : whereDetailCopy(where).helper}
+                helperText={touched && whereDetailInvalid ? whereDetailErrorText(whereDetail) : `${whereDetailCopy(where).helper} · ${whereDetail.length}/${TIL_WHERE_DETAIL_MAX_LENGTH}`}
                 fullWidth
+                slotProps={{ htmlInput: { maxLength: TIL_WHERE_DETAIL_MAX_LENGTH } }}
               />
             </Stack>
           )}
+
         </Stack>
 
-        {/* Right three-quarters: the actual learning. */}
-        <Box sx={{ width: "75%", display: "flex", flexDirection: "column", gap: 1 }}>
+        {/* Right three-quarters: the headline, then the actual learning. */}
+        <Box sx={{ width: "75%", display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Stack spacing={0.5}>
+            <Typography variant="subtitle2" color={touched && titleInvalid ? "error" : "text.primary"}>
+              Title
+            </Typography>
+            <TextField
+              placeholder="e.g. API latency and connection pooling"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              error={touched && titleInvalid}
+              helperText={
+                touched && titleInvalid
+                  ? title.trim().length === 0
+                    ? "Required"
+                    : `Must be ${TIL_TITLE_MAX_LENGTH} characters or fewer`
+                  : `${title.length}/${TIL_TITLE_MAX_LENGTH}`
+              }
+              fullWidth
+              slotProps={{ htmlInput: { maxLength: TIL_TITLE_MAX_LENGTH } }}
+            />
+          </Stack>
           <Typography variant="subtitle2" color={touched && whatInvalid ? "error" : "text.primary"}>
             What did you learn?
           </Typography>
@@ -345,6 +432,9 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
             <TilRichTextField
               value={what}
               onChange={setWhat}
+              onUploadImage={uploadImage}
+              onUploadError={showError}
+              onUploadingChange={setIsUploadingImage}
               placeholder="What did you learn? Explain it so others can learn from it too."
             />
           </Box>
@@ -353,13 +443,27 @@ export default function SubmitEntryDialog({ open, onClose }: { open: boolean; on
           </Typography>
         </Box>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={close} disabled={create.isPending}>
-          Cancel
-        </Button>
-        <Button variant="contained" onClick={submit} disabled={create.isPending}>
-          {create.isPending ? "Sharing…" : "Share"}
-        </Button>
+      <DialogActions sx={{ justifyContent: "space-between", px: 3 }}>
+        <Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.3 }}>
+            Submitted by
+          </Typography>
+          <Typography variant="caption" sx={{ display: "block", lineHeight: 1.3 }}>
+            {userInfo.isLoading
+              ? "Loading…"
+              : userInfo.data
+                ? `${userInfo.data.displayName} (${userInfo.data.email})`
+                : "Couldn't load your name"}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1}>
+          <Button onClick={close} disabled={create.isPending}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={submit} disabled={create.isPending || isUploadingImage}>
+            {create.isPending ? "Sharing…" : isUploadingImage ? "Uploading image…" : "Share"}
+          </Button>
+        </Stack>
       </DialogActions>
     </Dialog>
   );

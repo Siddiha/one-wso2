@@ -40,6 +40,50 @@ describe("sanitizeTilHtml", () => {
   it("drops a javascript: link", () => {
     expect(sanitizeTilHtml('<a href="javascript:alert(1)">bad</a>')).not.toContain("javascript:");
   });
+
+  it("keeps an img's src and alt", () => {
+    const html = '<img src="https://wso2.com/x.png" alt="a screenshot">';
+    const result = sanitizeTilHtml(html);
+    expect(result).toContain('src="https://wso2.com/x.png"');
+    expect(result).toContain('alt="a screenshot"');
+  });
+
+  it("strips a disallowed attribute (onerror) on an img but keeps the element", () => {
+    const result = sanitizeTilHtml('<img src="https://wso2.com/x.png" onerror="alert(1)">');
+    expect(result).not.toContain("onerror");
+    expect(result).toContain("<img");
+  });
+
+  it("drops a javascript: img src", () => {
+    expect(sanitizeTilHtml('<img src="javascript:alert(1)">')).not.toContain("javascript:");
+  });
+
+  it("drops a data: img src", () => {
+    // ALLOWED_URI_REGEXP only permits http(s)/mailto/tel -- data: URIs
+    // (base64-embedded images) are excluded on purpose, same reasoning as
+    // the backend sanitizer: real storage via POST /uploads, not inline
+    // data blowing past the length limit and bloating storage.
+    expect(sanitizeTilHtml('<img src="data:image/png;base64,aGVsbG8=">')).not.toContain("data:");
+  });
+
+  it("keeps an img's width attribute", () => {
+    // Backs TilRichTextField's resize overlay (S/M/L presets), which sets
+    // this as a plain HTML attribute, never an inline style.
+    const result = sanitizeTilHtml('<img src="https://wso2.com/x.png" width="50%">');
+    expect(result).toContain('width="50%"');
+  });
+
+  it("strips an img's style attribute", () => {
+    // "width" is allowed specifically because, unlike "style", it can't
+    // carry CSS -- style itself must stay disallowed regardless, or the
+    // resize overlay could just as easily have opened a style-based
+    // injection surface instead of this one safe attribute.
+    const result = sanitizeTilHtml(
+      '<img src="https://wso2.com/x.png" style="position:fixed;top:0;left:0;width:100vw;height:100vh;">',
+    );
+    expect(result).not.toContain("style");
+    expect(result).toContain("<img");
+  });
 });
 
 describe("isEmptyTilHtml", () => {
