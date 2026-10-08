@@ -65,6 +65,25 @@ describe("sanitizeTilHtml", () => {
     // data blowing past the length limit and bloating storage.
     expect(sanitizeTilHtml('<img src="data:image/png;base64,aGVsbG8=">')).not.toContain("data:");
   });
+
+  it("keeps an img's width attribute", () => {
+    // Backs TilRichTextField's resize overlay (S/M/L presets), which sets
+    // this as a plain HTML attribute, never an inline style.
+    const result = sanitizeTilHtml('<img src="https://wso2.com/x.png" width="50%">');
+    expect(result).toContain('width="50%"');
+  });
+
+  it("strips an img's style attribute", () => {
+    // "width" is allowed specifically because, unlike "style", it can't
+    // carry CSS -- style itself must stay disallowed regardless, or the
+    // resize overlay could just as easily have opened a style-based
+    // injection surface instead of this one safe attribute.
+    const result = sanitizeTilHtml(
+      '<img src="https://wso2.com/x.png" style="position:fixed;top:0;left:0;width:100vw;height:100vh;">',
+    );
+    expect(result).not.toContain("style");
+    expect(result).toContain("<img");
+  });
 });
 
 describe("isEmptyTilHtml", () => {

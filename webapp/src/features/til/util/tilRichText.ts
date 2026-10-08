@@ -29,7 +29,12 @@ import DOMPurify from "dompurify";
 // trusts that the editor sanitized it either.
 const SANITIZE_CONFIG = {
   ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "ol", "ul", "li", "a", "img"],
-  ALLOWED_ATTR: ["href", "target", "src", "alt"],
+  // "width" (not "style") backs the editor's resize overlay -- a plain HTML
+  // dimension attribute, not a CSS property string, so there's no style-
+  // based injection surface (background: url(...), position: fixed, etc.)
+  // the way allowing "style" outright would open up. til-backend's own
+  // sanitize.py mirrors this same addition -- see its own comment on why.
+  ALLOWED_ATTR: ["href", "target", "src", "alt", "width"],
   ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 };
 

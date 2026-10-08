@@ -255,8 +255,16 @@ export default function TilRichTextField({
   // with far less that can go wrong.
   const resizeSelectedImage = (percent: number) => {
     if (!selectedImg) return;
-    selectedImg.style.width = `${percent}%`;
-    selectedImg.style.height = "auto";
+    // A plain HTML "width" attribute, not an inline style -- sanitizeTilHtml
+    // (and til-backend's own sanitize_what_html) allowlist specific
+    // ATTRIBUTES, not "style" wholesale, so a resize set via .style.width
+    // was silently stripped the moment this change round-tripped through
+    // either sanitizer, snapping the image back to full size right after
+    // (confirmed: ALLOWED_ATTR never included "style"). No explicit height
+    // needed -- the browser preserves aspect ratio from width alone, same
+    // as the editor's own ".ql-editor img { height: auto }" rule already
+    // assumed.
+    selectedImg.setAttribute("width", `${percent}%`);
     commitChange();
   };
 
