@@ -248,6 +248,18 @@ describe("QuoteWizardPage — review and submit", () => {
     expect(screen.getByRole("button", { name: "Add line" })).toBeEnabled();
   });
 
+  // 2026-10-09: one price book (the opportunity's), named; not "the USD price books".
+  it("names the one price book products come from", async () => {
+    const book = { id: "01sUSD00000000001A", name: "USD Price Book (Current)" };
+    Object.assign(version, { data: { ...ready, version: { ...ready.version, defaultPricebook: book, lines: [] } } });
+    renderWizard();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Products & Pricing" }));
+    expect(
+      screen.getByText("Add products from the USD Price Book (Current) price book. Prices come from this price book."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/price books/)).toBeNull();
+  });
+
   it("can't add products without a price book from the opportunity", async () => {
     Object.assign(version, { data: { ...ready, version: { ...ready.version, defaultPricebook: null } } });
     renderWizard();

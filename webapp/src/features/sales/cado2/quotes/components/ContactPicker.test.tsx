@@ -42,9 +42,28 @@ function Value(): JSX.Element {
 }
 
 describe("ContactPicker", () => {
+  // 2026-10-09: nothing is listed until the AM chooses to pick from Salesforce
+  // (an open list on arrival read as a directory, not a choice).
+  it("starts with nothing chosen and the two ways to choose, without a list", async () => {
+    render(<Harness />);
+    const user = userEvent.setup();
+    const empty = within(screen.getByLabelText("Billing contact: none chosen"));
+    expect(empty.getByText("No billing contact chosen yet")).toBeInTheDocument();
+    expect(empty.getByRole("button", { name: "Someone not in Salesforce…" })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+
+    await user.click(empty.getByRole("button", { name: "Choose from Salesforce" }));
+    expect(screen.getByText("Choose the billing contact")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Billing contact" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.getByText("value: none")).toBeInTheDocument();
+  });
+
   it("searches the account's contacts and shows the choice as a card with Change", async () => {
     render(<Harness />);
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Choose from Salesforce" }));
     const list = () => within(screen.getByRole("radiogroup", { name: "Billing contact" }));
     expect(list().getAllByRole("radio")).toHaveLength(2);
 

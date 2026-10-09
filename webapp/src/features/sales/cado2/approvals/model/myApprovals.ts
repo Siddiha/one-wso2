@@ -19,6 +19,7 @@
 // decision, one line saying what was recorded.
 
 import type { ApprovalOutcome, ApprovalStep, ApprovalWorkflow } from "@features/sales/cado2/approvals/api/approvalTypes";
+import { renewalStartWarning } from "@features/sales/cado2/quotes/form/renewalStart";
 
 /** What kind of rule asked for the approval; picks the row's icon. */
 export type ReasonKind = "discount" | "review" | "terms" | "term" | "downsell" | "payment" | "category" | "other";
@@ -107,6 +108,20 @@ export function repCategoryPoints(
       title: `Line ${l.number} · ${l.productName}`,
       detail: `Category chosen by the rep: ${CATEGORY_LABEL[l.category] ?? l.category}`,
     }));
+}
+
+/**
+ * For Deal Desk: a renewal that doesn't start the day after the renewed
+ * opportunity ends (2026-10-09), e.g. "Start date" / "Starts 1 Mar 2027, not
+ * 1 Feb 2027, the day after APIM Subs 2026 ends". The AM may choose it; Deal
+ * Desk checks it. Nothing otherwise.
+ */
+export function renewalStartPoints(sheet: {
+  readonly startDate: string;
+  readonly renewalStart: { readonly date: string; readonly fromName: string; readonly differs: boolean } | null;
+}): ReasonRow[] {
+  if (!sheet.renewalStart?.differs || !sheet.startDate) return [];
+  return [{ kind: "term", title: "Start date", detail: renewalStartWarning(sheet.startDate, sheet.renewalStart) }];
 }
 
 /**

@@ -35,7 +35,6 @@ import {
   addressFrom,
   emptyAddress,
   emptyContact,
-  formatDate,
   parseDateString,
   toDateString,
   type DraftFormValues,
@@ -45,6 +44,8 @@ import { formatMoney } from "@features/sales/cado2/utils/money";
 import AccountPicker from "@features/sales/cado2/quotes/components/pickers/AccountPicker";
 import OpportunityPicker from "@features/sales/cado2/quotes/components/pickers/OpportunityPicker";
 import SectionCard from "@features/sales/cado2/components/section-card/SectionCard";
+import { expectedRenewalStart, renewalStartWarning } from "@features/sales/cado2/quotes/form/renewalStart";
+import { subscriptionPeriod } from "@features/sales/cado2/utils/subscription";
 import { useFieldIssue } from "@features/sales/cado2/quotes/components/fieldIssues";
 
 const { DatePicker } = DatePickers;
@@ -110,7 +111,7 @@ function accountFindings(
     { key: "subRegion", label: "Sub-region", value: account.subRegion || "Not set in Salesforce" },
     {
       key: "opportunities",
-      label: "Opportunities",
+      label: "Open opportunities",
       value: opportunities ? `${opportunities} found, newest first` : "None found",
       warning: opportunities === 0,
     },
@@ -150,11 +151,12 @@ function dealFindings(v: DraftFormValues, o: Opportunity | undefined): Finding[]
       warning: true,
     });
   }
-  if (o?.stageName || o?.closeDate) {
+  // The subscription it covers (2026-10-09), not its pipeline stage.
+  if (o) {
     out.push({
-      key: "stage",
-      label: "Stage",
-      value: [o.stageName, o.closeDate ? `closes ${formatDate(o.closeDate)}` : null].filter(Boolean).join(" · "),
+      key: "subscription",
+      label: "Subscription",
+      value: subscriptionPeriod(o),
     });
   }
   if (o?.arr !== null && o?.arr !== undefined) {
@@ -176,8 +178,14 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
   const [revealedFor, setRevealedFor] = useState<string | null>(null);
   const markRevealed = useCallback(() => setRevealedFor(opportunityId), [opportunityId]);
   const showRest = Boolean(opportunityId) && (locked || revealedFor === opportunityId);
+  // Likewise, the opportunity list waits until the account's findings have
+  // all ticked in (2026-10-09), so the page doesn't change under them.
+  const [accountRevealedFor, setAccountRevealedFor] = useState<string | null>(null);
+  const markAccountRevealed = useCallback(() => setAccountRevealedFor(accountId), [accountId]);
 
+  // Open opportunities to quote (2026-10-09); a renewal renews closed-won ones.
   const opportunities = useAccountOpportunities(accountId || null);
+  const wonOpportunities = useAccountOpportunities(isRenewal && accountId ? accountId : null, "won");
   const contacts = useAccountContacts(accountId || null);
   const legalEntities = useActiveLegalEntities();
   // For pre-filling the quote's currency from the opportunity.
@@ -247,7 +255,25 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
     }
   };
 
-  const previousOptions = (opportunities.data ?? []).filter((o) => o.id !== opportunityId);
+  const previousOptions = (wonOpportunities.data ?? []).filter((o) => o.id !== opportunityId);
+
+  // A renewal starts the day after the renewed opportunity ends (2026-10-09):
+  // filled in when it is chosen; the AM may change it, with a warning.
+  const [previousIds, startDate] = useWatch({ control, name: ["previousOpportunityIds", "startDate"] });
+  const renewedOf = (ids: readonly string[]) => (wonOpportunities.data ?? []).filter((o) => ids.includes(o.id));
+  const expectedStart = isRenewal ? expectedRenewalStart(renewedOf(previousIds)) : null;
+  const renewedWithoutEnd = isRenewal ? renewedOf(previousIds).filter((o) => !o.subsEndDate) : [];
+  // The start date follows the suggestion only while the AM hasn't chosen
+  // their own: when it is empty, or still the date suggested before this
+  // change. A date the AM picked stays (with its warning); a suggestion whose
+  // source is gone is cleared, so the AM is asked to choose.
+  const chooseRenewed = (ids: string[]) => {
+    setValue("previousOpportunityIds", ids, { shouldDirty: true });
+    const current = getValues("startDate");
+    if (current && current !== expectedStart?.date) return;
+    const expected = expectedRenewalStart(renewedOf(ids));
+    setValue("startDate", expected?.date ?? "", { shouldDirty: true });
+  };
 
   // Watched, not read once: picking an account re-renders on its id before
   // the name is set, and a one-off read would show the old (empty) name.
@@ -279,6 +305,7 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
           <SalesforceFindings
             key={accountId}
             title="Found in Salesforce for this account"
+            onDone={markAccountRevealed}
             loading={opportunities.isPending || contacts.isPending}
             findings={accountFindings(
               {
@@ -303,7 +330,7 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
           </Alert>
         ) : null}
 
-        {accountId && (locked || !opportunities.isPending) ? (
+        {accountId && (locked || accountRevealedFor === accountId) ? (
           <Box>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
               <BriefcaseIcon size={16} />
@@ -311,7 +338,7 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
                 Opportunity
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Newest first
+                Open ones, newest first
               </Typography>
             </Stack>
             <OpportunityPicker
@@ -326,6 +353,8 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
               onChange={([id]) => chooseOpportunity(opportunities.data?.find((o) => o.id === id))}
               locked={locked}
               error={oppIssue}
+              emptyText="This account has no open opportunities in Salesforce."
+              instruction="Choose the opportunity this quote is for"
             />
           </Box>
         ) : null}
@@ -354,16 +383,18 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
                 render={({ field }) => (
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Choose the opportunities this renews; several when co-terminated deals are consolidated. Their ARR is
-                      compared with this quote&apos;s to check for a downsell.
+                      Choose the closed-won opportunities this renews; several when co-terminated deals are consolidated. Their
+                      ARR is compared with this quote&apos;s to check for a downsell, and the quote starts the day after they end.
                     </Typography>
                     <OpportunityPicker
                       label="Previous opportunities"
                       multiple
                       opportunities={previousOptions}
-                      loading={opportunities.isPending}
+                      loading={wonOpportunities.isPending}
                       selected={field.value}
-                      onChange={field.onChange}
+                      onChange={chooseRenewed}
+                      emptyText="This account has no closed-won opportunities in Salesforce."
+                      instruction="Tick the opportunities this quote renews"
                     />
                   </Box>
                 )}
@@ -402,13 +433,30 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
                       size: "small",
                       required: true,
                       error: Boolean(startIssue),
-                      helperText: startIssue ?? "The subscription term is set with the products",
+                      helperText:
+                        startIssue ??
+                        (expectedStart && field.value === expectedStart.date
+                          ? `The day after ${expectedStart.fromName || "the renewed opportunity"} ends`
+                          : "The subscription term is set with the products"),
                       sx: { maxWidth: 240 },
                     },
                   }}
                 />
               )}
             />
+            {/* The AM may start another day; it is pointed out, never blocked (2026-10-09). */}
+            {expectedStart && startDate && startDate !== expectedStart.date ? (
+              <Alert severity="warning" role="status">
+                {renewalStartWarning(startDate, expectedStart)}. Deal Desk will see this.
+              </Alert>
+            ) : null}
+            {renewedWithoutEnd.length ? (
+              <Alert severity="info" variant="outlined">
+                {renewedWithoutEnd.map((o) => o.name ?? o.id).join(", ")} {renewedWithoutEnd.length === 1 ? "has" : "have"} no
+                subscription end date in Salesforce (<code>Subs_End_Date__c</code>), so the start date can&apos;t be
+                worked out from {renewedWithoutEnd.length === 1 ? "it" : "them"}. Choose it.
+              </Alert>
+            ) : null}
           </Section>
         </>
       ) : null}

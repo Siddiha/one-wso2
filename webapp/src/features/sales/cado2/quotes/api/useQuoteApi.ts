@@ -89,10 +89,11 @@ export function useAccountSearch(term: string) {
   return useAuthedQuery<Account[]>(["accounts", t], t.length >= MIN_ACCOUNT_SEARCH ? cado2ServiceUrls.accounts(t) : null);
 }
 
-export function useAccountOpportunities(accountId: string | null) {
+/** Open opportunities to quote (the default), or closed-won ones for a renewal to renew. */
+export function useAccountOpportunities(accountId: string | null, status: "open" | "won" = "open") {
   return useAuthedQuery<Opportunity[]>(
-    ["account-opportunities", accountId],
-    accountId ? cado2ServiceUrls.accountOpportunities(accountId) : null,
+    ["account-opportunities", accountId, status],
+    accountId ? cado2ServiceUrls.accountOpportunities(accountId, status) : null,
   );
 }
 

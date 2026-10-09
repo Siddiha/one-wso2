@@ -18,6 +18,7 @@ import type { JSX } from "react";
 import { Stack, Typography } from "@wso2/oxygen-ui";
 import { LandmarkIcon } from "@wso2/oxygen-ui-icons-react";
 import { formatDate } from "@features/sales/cado2/quotes/form/draftForm";
+import { renewalStartWarning } from "@features/sales/cado2/quotes/form/renewalStart";
 import { termLabel, type QuoteSheet } from "@features/sales/cado2/quotes/sheet/sheetModel";
 import SheetCard, { Fact, FactGrid } from "@features/sales/cado2/components/section-card/SectionCard";
 
@@ -71,7 +72,17 @@ export default function DealSection({ sheet }: { sheet: QuoteSheet }): JSX.Eleme
                 `${sheet.previousOpportunityCount} previous opportunit${sheet.previousOpportunityCount === 1 ? "y" : "ies"}`
               )
             }
-            hint="Previous ARR not available yet"
+            hint={
+              sheet.renewalStart?.differs && sheet.startDate ? (
+                <Typography variant="caption" color="warning.main">
+                  ⚠ {renewalStartWarning(sheet.startDate, sheet.renewalStart)}
+                </Typography>
+              ) : sheet.renewalStart ? (
+                `Starts the day after ${sheet.renewalStart.fromName || "it"} ends`
+              ) : (
+                "Previous ARR not available yet"
+              )
+            }
           />
         ) : null}
         <Fact label="Pricing rules" value={sheet.pricingRulesVersion} />

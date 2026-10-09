@@ -110,8 +110,10 @@ Behaviour is kept as it is today unless §7 says otherwise.
 
 - **My Quotes** — KPI filter chips by status, search, rich rows (customer, opportunity, totals,
   status, approval deadline), row menu (open, edit, delete draft). "New quote" button.
-- **Quote wizard** — Overview (Salesforce account with its sales region, opportunity, legal entity, start date; an account with no sales region in Salesforce stops the quote here, with Next and Save draft disabled) → Products
-  & Pricing (the opportunity's currency and price book, locked; add lines from that price book only;
+- **Quote wizard** — Overview (Salesforce account with its sales region, an open opportunity tagged First Sale /
+  Renewal / Expansion, legal entity, start date; a renewal picks the closed-won opportunities it renews and starts the
+  day after they end, with a warning if the AM picks another day; an account with no sales region in Salesforce stops the quote here, with Next and Save draft disabled) → Products
+  & Pricing (the opportunity's currency and price book, locked; add lines from that price book only, searched by name or product code;
   discounts; subscription term; partner commission) → Commercial (payment terms, contacts, bill-to
   and ship-to, special terms, justification) → Review (summary, approval preview, submit). The draft
   is saved when moving between steps and on "Save draft". The live pricing and approval previews are
@@ -178,7 +180,7 @@ built in `cado2ServiceUrls` in `src/config/apiConfig.ts`.
 | Area | Endpoints |
 |---|---|
 | Identity | `GET /me` |
-| Salesforce lookups | `GET /accounts?nameContains&limit`, `GET /accounts/{id}/opportunities`, `GET /accounts/{id}/contacts`, `GET /products?currency&pricebookId&limit&offset[&nameContains]`, `GET /pricebooks?currency` |
+| Salesforce lookups | `GET /accounts?nameContains&limit`, `GET /accounts/{id}/opportunities[?status=open\|won]`, `GET /accounts/{id}/contacts`, `GET /products?currency&pricebookId&limit&offset[&search]`, `GET /pricebooks?currency` |
 | Reference data | `GET /legal-entities[?active=true]`, `GET /currencies`, `GET /quote-settings` |
 | Pricing | `POST /pricing/preview` |
 | Quotes | `GET /quotes?limit&status&scope=all`, `POST /quotes`, `GET /quotes/{id}`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/close`, `GET /quotes/{id}/audit-events`, `GET/PUT/DELETE /quotes/{id}/versions/{v}`, `POST …/submit`, `POST …/recall` |
