@@ -43,7 +43,7 @@ import {
   useStoredApprovalPreview,
 } from "@features/sales/cado2/approvals/api/useApprovalApi";
 import type { ApprovalOutcome, ApprovalStep } from "@features/sales/cado2/approvals/api/approvalTypes";
-import { decisionNote, repCategoryPoints } from "@features/sales/cado2/approvals/model/myApprovals";
+import { decisionNote, renewalStartPoints, repCategoryPoints } from "@features/sales/cado2/approvals/model/myApprovals";
 import YourApprovalPanel, { YOUR_APPROVAL_ANCHOR } from "@features/sales/cado2/approvals/components/YourApprovalPanel";
 import { ArrowDownIcon, ArrowLeftIcon } from "@wso2/oxygen-ui-icons-react";
 import { useCado2Me } from "@features/sales/cado2/api/useCado2Me";
@@ -243,7 +243,7 @@ export default function QuoteDetailPage(): JSX.Element {
                   steps={workflow.data?.steps ?? []}
                   actionable={actionable}
                   note={noteForThisQuote}
-                  repCategories={repCategoryPoints(sheet.lines)}
+                  repCategories={[...repCategoryPoints(sheet.lines), ...renewalStartPoints(sheet)]}
                   onDecide={openDecision}
                 />
               </Box>

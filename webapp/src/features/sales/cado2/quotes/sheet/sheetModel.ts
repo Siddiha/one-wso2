@@ -110,6 +110,12 @@ export interface QuoteSheet {
   /** Names when known (saved versions); the form only knows how many. */
   readonly previousOpportunities: readonly string[];
   readonly previousOpportunityCount: number;
+  /**
+   * A renewal's expected start: the day after the renewed opportunity ends,
+   * as saved (frozen at submission). `differs`: the quote starts another day.
+   * Null when unknown (no end date in Salesforce, an unsaved form) or not a renewal.
+   */
+  readonly renewalStart: { readonly date: string; readonly fromName: string; readonly differs: boolean } | null;
   readonly legalEntity: { readonly name: string; readonly address: string | null } | null;
   readonly currency: string;
   /** The quote's price book; null when none was chosen. */
@@ -185,6 +191,9 @@ export function sheetFromVersion(res: DraftResponse): QuoteSheet {
     isRenewal: v.isRenewal,
     previousOpportunities: v.previousOpportunities.map((p) => p.name),
     previousOpportunityCount: v.previousOpportunities.length,
+    renewalStart: v.renewalStart
+      ? { date: v.renewalStart.expectedStartDate, fromName: v.renewalStart.fromOpportunityName, differs: v.renewalStart.differs }
+      : null,
     legalEntity: le ? { name: le.name, address: addressLines(le).join(", ") || null } : null,
     currency: v.currencyIsoCode ?? "",
     pricebookName: v.defaultPricebook?.name ?? null,
@@ -265,6 +274,7 @@ export function sheetFromForm(
     isRenewal: v.isRenewal,
     previousOpportunities: [],
     previousOpportunityCount: v.isRenewal ? v.previousOpportunityIds.length : 0,
+    renewalStart: null,
     legalEntity: legalEntity ? { name: legalEntity.name, address: legalEntity.country ?? null } : null,
     currency: v.currencyIsoCode,
     pricebookName: v.defaultPricebookName || null,

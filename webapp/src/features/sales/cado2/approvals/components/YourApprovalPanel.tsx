@@ -39,7 +39,10 @@ interface YourApprovalPanelProps {
   readonly actionable: readonly ApprovalStep[];
   /** After a decision: what was recorded, e.g. "Approved as CRO." */
   readonly note: string | null;
-  /** Deal Desk: the lines whose category the rep chose, to verify (repCategoryPoints). */
+  /**
+   * Deal Desk: what they verify themselves: the lines whose category the rep
+   * chose (repCategoryPoints) and a renewal starting another day (renewalStartPoints).
+   */
   readonly repCategories?: readonly ReasonRow[];
   /** Opens the confirmation for a decision on one of the viewer's steps. */
   readonly onDecide: (outcome: ApprovalOutcome, step: ApprovalStep) => void;

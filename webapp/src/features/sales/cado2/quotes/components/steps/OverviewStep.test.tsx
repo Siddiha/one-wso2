@@ -34,12 +34,22 @@ const renewal: Opportunity = {
 let searchResults: unknown[] = [];
 /** The opportunity's currency in Salesforce (changed by one test). */
 let oppCurrency = "USD";
+/** The account's closed-won opportunities, for a renewal (2026-10-09). */
+const wonList = [
+  { ...renewal, id: "006W", name: "APIM Subs 2026", stageName: "Closed Won", isWon: true, isClosed: true,
+    subsStartDate: "2026-02-01", subsEndDate: "2027-01-31" },
+];
+/** Which lists were asked for: open by default, won for a renewal. */
+const asked: string[] = [];
 const lookup = (data: unknown) => ({ data, isPending: false, isFetching: false, error: null });
 
 vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
   MIN_ACCOUNT_SEARCH: 3,
   useAccountSearch: () => lookup(searchResults),
-  useAccountOpportunities: () => lookup([{ ...renewal, currencyIsoCode: oppCurrency }]),
+  useAccountOpportunities: (id: string | null, status = "open") => {
+    if (id) asked.push(status);
+    return lookup(status === "won" ? wonList : [{ ...renewal, currencyIsoCode: oppCurrency }]);
+  },
   useAccountContacts: () => lookup([{ id: "003A", name: "Marco Ruiz" }, { id: "003B", name: "Ana" }]),
   useActiveLegalEntities: () => lookup([]),
   useCurrencies: () => lookup(["USD"]),
@@ -53,6 +63,12 @@ function Pricing() {
   return <p>pricing: {currency || "none"} · {book || "none"}</p>;
 }
 
+/** The start date the form holds. */
+function Start() {
+  const start = useWatch<DraftFormValues, "startDate">({ name: "startDate" });
+  return <p>start: {start || "none"}</p>;
+}
+
 function Harness({ values, locked = false }: { values: Partial<DraftFormValues>; locked?: boolean }) {
   const form = useForm<DraftFormValues>({ defaultValues: { ...emptyDraftForm(), ...values } });
   return (
@@ -60,6 +76,7 @@ function Harness({ values, locked = false }: { values: Partial<DraftFormValues>;
       <FormProvider {...form}>
         <OverviewStep locked={locked} />
         <Pricing />
+        <Start />
       </FormProvider>
     </DatePickers.LocalizationProvider>
   );
@@ -146,7 +163,9 @@ describe("OverviewStep — Salesforce first (2026-09-28)", () => {
     expect(await within(found).findByText("USD 34,000.00", {}, { timeout: 3000 })).toBeInTheDocument();
     expect(within(found).getByText("Renewal")).toBeInTheDocument();
     expect(within(found).getByText("Partner-led · Acme Reseller (Reseller)")).toBeInTheDocument();
-    expect(within(found).getByText("Negotiation · closes 30 Nov 2026")).toBeInTheDocument();
+    // The subscription it covers, not its pipeline stage (2026-10-09).
+    expect(within(found).getByText("No subscription dates in Salesforce")).toBeInTheDocument();
+    expect(within(found).queryByText(/Negotiation/)).toBeNull();
     for (const r of REST) expect(await screen.findByRole("region", { name: r })).toBeInTheDocument();
   });
 
@@ -186,5 +205,26 @@ describe("OverviewStep — Salesforce first (2026-09-28)", () => {
     } finally {
       oppCurrency = "USD";
     }
+  });
+
+  // 2026-10-09: a renewal renews closed-won opportunities and starts the day after they end.
+  it("offers closed-won opportunities to renew, and starts the day after the renewed one ends", async () => {
+    asked.length = 0;
+    render(<Harness values={deal} locked />);
+    expect(asked).toContain("open");
+    expect(asked).toContain("won");
+
+    await userEvent.click(screen.getByRole("option", { name: "APIM Subs 2026" }));
+
+    expect(screen.getByText("start: 2027-02-01")).toBeInTheDocument();
+    expect(screen.getByText("The day after APIM Subs 2026 ends")).toBeInTheDocument();
+    expect(screen.queryByText(/Deal Desk will see this/)).toBeNull();
+  });
+
+  it("warns, without blocking, when a renewal starts another day", () => {
+    render(<Harness values={{ ...deal, previousOpportunityIds: ["006W"], startDate: "2027-03-01" }} locked />);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Starts 1 Mar 2027, not 1 Feb 2027, the day after APIM Subs 2026 ends. Deal Desk will see this.",
+    );
   });
 });

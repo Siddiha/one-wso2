@@ -387,6 +387,7 @@ export default function AddLineDialog({
                   <TextField
                     {...params}
                     label={line ? "Change product" : "Product"}
+                    placeholder="Search by name or product code"
                     size="small"
                     required={!line}
                     error={Boolean(show("product")) && !product}

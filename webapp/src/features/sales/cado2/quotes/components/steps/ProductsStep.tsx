@@ -129,7 +129,9 @@ export default function ProductsStep({ preview }: ProductsStepProps): JSX.Elemen
               No products yet
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Add products from the {currency || "quote's"} price books. Prices come from the price book.
+              {/* One price book: the opportunity's (D57), named. */}
+              Add products from {values.defaultPricebookName ? `the ${values.defaultPricebookName} price book` : "the quote's price book"}.
+              Prices come from this price book.
             </Typography>
             {addButton}
           </Box>

@@ -1838,15 +1838,16 @@ export const cado2ServiceUrls = {
   // Salesforce lookups, read live through the backend.
   accounts: (nameContains: string): string =>
     `${cado2BackendUrl}/accounts?nameContains=${encodeSegment(nameContains)}&limit=20`,
-  accountOpportunities: (accountId: string): string =>
-    `${cado2BackendUrl}/accounts/${encodeSegment(accountId)}/opportunities`,
+  // Open opportunities to quote; closed-won ones for a renewal to renew.
+  accountOpportunities: (accountId: string, status: "open" | "won" = "open"): string =>
+    `${cado2BackendUrl}/accounts/${encodeSegment(accountId)}/opportunities?status=${status}`,
   accountContacts: (accountId: string): string =>
     `${cado2BackendUrl}/accounts/${encodeSegment(accountId)}/contacts`,
   // One page of a price book's products in a currency. Paged server-side by
   // limit/offset (Salesforce stops at offset 2000).
   products: (
     currency: string,
-    nameContains: string,
+    search: string,
     page: { pricebookId: string; limit: number; offset: number },
   ): string => {
     const q = new URLSearchParams({
@@ -1855,7 +1856,8 @@ export const cado2ServiceUrls = {
       limit: String(page.limit),
       offset: String(page.offset),
     });
-    if (nameContains) q.set("nameContains", nameContains);
+    // The product name or its product code.
+    if (search) q.set("search", search);
     return `${cado2BackendUrl}/products?${q.toString()}`;
   },
   pricebooks: (currency: string): string => `${cado2BackendUrl}/pricebooks?currency=${encodeSegment(currency)}`,
