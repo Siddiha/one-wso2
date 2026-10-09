@@ -31,9 +31,9 @@ type OverviewTab = "cc" | "opd" | "expense";
 // label in two places meaning two different things is exactly the
 // confusion this drops.
 const OVERVIEW_SECTIONS: { value: OverviewTab; label: string }[] = [
-  { value: "cc", label: "Credit Card" },
   { value: "opd", label: "OPD Claims" },
   { value: "expense", label: "Expense Claims" },
+  { value: "cc", label: "Credit Card" },
 ];
 
 /**
