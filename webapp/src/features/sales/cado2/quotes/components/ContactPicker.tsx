@@ -36,11 +36,17 @@ interface ContactPickerProps {
   readonly helperText?: string;
 }
 
+/** What each picker chooses, for "No billing contact chosen yet" and "Choose the billing contact". */
+const ROLE: Record<ContactField, string> = { billingContact: "billing contact", securityContact: "security contact" };
+
 /**
- * Pick a contact of the account, or type in someone who isn't in Salesforce
- *. A chosen contact shows as a card with Change; choosing shows a
- * searchable list (F5 feedback, 2026-09-25). Only Salesforce Ids and typed
- * text are sent; the backend snapshots the contact's details.
+ * Pick a contact of the account, or type in someone who isn't in Salesforce.
+ * Nothing chosen yet: a card offering "Choose from Salesforce" or "Someone
+ * not in Salesforce…" (2026-10-09: an open list on arrival read as a directory,
+ * not a choice). Choosing shows a searchable list headed "Choose the billing
+ * contact"; a click on a name picks it (F5 feedback, 2026-09-25). A chosen
+ * contact shows as a card with Change. Only Salesforce Ids and typed text are
+ * sent; the backend snapshots the contact's details.
  */
 export default function ContactPicker({ name, issueField, label, contacts, loading, helperText }: ContactPickerProps): JSX.Element {
   const { control, setValue } = useFormContext<DraftFormValues>();
@@ -73,6 +79,33 @@ export default function ContactPicker({ name, issueField, label, contacts, loadi
       ) : null}
     </Box>
   );
+
+  // Nothing chosen yet: say so, and offer the two ways to choose.
+  if (value.mode === "none" && !changing) {
+    return (
+      <Stack spacing={1}>
+        {heading}
+        <Paper variant="outlined" aria-label={`${label}: none chosen`} sx={{ p: 1.75, borderRadius: 2 }}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "flex-start", sm: "center" }}>
+            <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
+              No {ROLE[name]} chosen yet
+            </Typography>
+            <Button size="small" variant="outlined" startIcon={<SearchIcon size={14} />} onClick={() => setChanging(true)}>
+              Choose from Salesforce
+            </Button>
+            <Button size="small" startIcon={<UserPlusIcon size={14} />} onClick={typeIn}>
+              Someone not in Salesforce…
+            </Button>
+          </Stack>
+        </Paper>
+        {idIssue ? (
+          <Typography variant="caption" color="error">
+            {idIssue}
+          </Typography>
+        ) : null}
+      </Stack>
+    );
+  }
 
   // Chosen from Salesforce: a card.
   if (value.mode === "salesforce" && value.sfContactId && !changing) {
@@ -148,6 +181,9 @@ export default function ContactPicker({ name, issueField, label, contacts, loadi
       {heading}
       <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
         <Stack spacing={1.25}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Choose the {ROLE[name]}
+          </Typography>
           <TextField
             size="small"
             placeholder="Search by name, title or email"

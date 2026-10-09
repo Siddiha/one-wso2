@@ -183,6 +183,10 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
   const [revealedFor, setRevealedFor] = useState<string | null>(null);
   const markRevealed = useCallback(() => setRevealedFor(opportunityId), [opportunityId]);
   const showRest = Boolean(opportunityId) && (locked || revealedFor === opportunityId);
+  // Likewise, the opportunity list waits until the account's findings have
+  // all ticked in (2026-10-09), so the page doesn't change under them.
+  const [accountRevealedFor, setAccountRevealedFor] = useState<string | null>(null);
+  const markAccountRevealed = useCallback(() => setAccountRevealedFor(accountId), [accountId]);
 
   // Open opportunities to quote (2026-10-09); a renewal renews closed-won ones.
   const opportunities = useAccountOpportunities(accountId || null);
@@ -300,6 +304,7 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
           <SalesforceFindings
             key={accountId}
             title="Found in Salesforce for this account"
+            onDone={markAccountRevealed}
             loading={opportunities.isPending || contacts.isPending}
             findings={accountFindings(
               {
@@ -324,7 +329,7 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
           </Alert>
         ) : null}
 
-        {accountId && (locked || !opportunities.isPending) ? (
+        {accountId && (locked || accountRevealedFor === accountId) ? (
           <Box>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
               <BriefcaseIcon size={16} />
@@ -348,6 +353,7 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
               locked={locked}
               error={oppIssue}
               emptyText="This account has no open opportunities in Salesforce."
+              instruction="Choose the opportunity this quote is for"
             />
           </Box>
         ) : null}
@@ -387,6 +393,7 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
                       selected={field.value}
                       onChange={chooseRenewed}
                       emptyText="This account has no closed-won opportunities in Salesforce."
+                      instruction="Tick the opportunities this quote renews"
                     />
                   </Box>
                 )}

@@ -136,4 +136,15 @@ describe("OpportunityPicker (F5 review: like the contact picker)", () => {
     );
     expect(screen.getByText("This account has no open opportunities in Salesforce.")).toBeInTheDocument();
   });
+
+  // 2026-10-09: the open list says what to do.
+  it("tells the AM to choose from the list", async () => {
+    render(
+      <OpportunityPicker label="Opportunity" opportunities={list} loading={false} selected={["006A"]} onChange={vi.fn()}
+        instruction="Choose the opportunity this quote is for" />,
+    );
+    expect(screen.queryByText("Choose the opportunity this quote is for")).toBeNull(); // a choice is showing
+    await userEvent.click(screen.getByRole("button", { name: "Change opportunity" }));
+    expect(screen.getByText("Choose the opportunity this quote is for")).toBeInTheDocument();
+  });
 });

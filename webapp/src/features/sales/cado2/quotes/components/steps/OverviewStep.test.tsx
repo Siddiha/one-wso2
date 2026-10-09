@@ -104,7 +104,10 @@ describe("OverviewStep — Salesforce first (2026-09-28)", () => {
   it("ticks in what Salesforce has for the account, then offers its opportunities", async () => {
     render(<Harness values={account} />);
     const found = await screen.findByLabelText("Found in Salesforce for this account", {}, { timeout: 3000 });
+    // The opportunity list waits until every finding is showing (2026-10-09).
+    expect(screen.queryByRole("listbox", { name: "Opportunity" })).toBeNull();
     expect(await within(found).findByText("2 found", {}, { timeout: 3000 })).toBeInTheDocument(); // contacts, the last line
+    expect(await screen.findByRole("listbox", { name: "Opportunity" })).toBeInTheDocument();
     expect(within(found).getByText("1 found, newest first")).toBeInTheDocument();
     expect(within(found).getByText("Philadelphia, USA")).toBeInTheDocument();
     for (const r of REST) expect(screen.queryByRole("region", { name: r })).toBeNull();

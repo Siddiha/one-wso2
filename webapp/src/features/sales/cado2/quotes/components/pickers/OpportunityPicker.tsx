@@ -36,6 +36,8 @@ interface OpportunityPickerProps {
   readonly error?: string;
   /** Shown when there are none, e.g. "This account has no open opportunities in Salesforce." */
   readonly emptyText?: string;
+  /** What to do, at the top of the open list, e.g. "Choose the opportunity this quote is for" (2026-10-09). */
+  readonly instruction?: string;
 }
 
 /**
@@ -104,6 +106,7 @@ export default function OpportunityPicker({
   locked = false,
   error,
   emptyText = "This account has no opportunities in Salesforce.",
+  instruction,
 }: OpportunityPickerProps): JSX.Element {
   const [open, setOpen] = useState(selected.length === 0);
   const [search, setSearch] = useState("");
@@ -130,6 +133,11 @@ export default function OpportunityPicker({
   const list = (
     <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
       <Stack spacing={1.25}>
+        {instruction ? (
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {instruction}
+          </Typography>
+        ) : null}
         <TextField
           size="small"
           placeholder="Search by name or type"
