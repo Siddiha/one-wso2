@@ -35,7 +35,6 @@ import {
   addressFrom,
   emptyAddress,
   emptyContact,
-  formatDate,
   parseDateString,
   toDateString,
   type DraftFormValues,
@@ -46,6 +45,7 @@ import AccountPicker from "@features/sales/cado2/quotes/components/pickers/Accou
 import OpportunityPicker from "@features/sales/cado2/quotes/components/pickers/OpportunityPicker";
 import SectionCard from "@features/sales/cado2/components/section-card/SectionCard";
 import { expectedRenewalStart, renewalStartWarning } from "@features/sales/cado2/quotes/form/renewalStart";
+import { subscriptionPeriod } from "@features/sales/cado2/utils/subscription";
 import { useFieldIssue } from "@features/sales/cado2/quotes/components/fieldIssues";
 
 const { DatePicker } = DatePickers;
@@ -156,12 +156,7 @@ function dealFindings(v: DraftFormValues, o: Opportunity | undefined): Finding[]
     out.push({
       key: "subscription",
       label: "Subscription",
-      value:
-        o.subsStartDate && o.subsEndDate
-          ? `${formatDate(o.subsStartDate)} – ${formatDate(o.subsEndDate)}`
-          : o.subsStartDate
-            ? `From ${formatDate(o.subsStartDate)}`
-            : "No subscription dates in Salesforce",
+      value: subscriptionPeriod(o),
     });
   }
   if (o?.arr !== null && o?.arr !== undefined) {
@@ -268,10 +263,16 @@ export default function OverviewStep({ locked }: OverviewStepProps): JSX.Element
   const renewedOf = (ids: readonly string[]) => (wonOpportunities.data ?? []).filter((o) => ids.includes(o.id));
   const expectedStart = isRenewal ? expectedRenewalStart(renewedOf(previousIds)) : null;
   const renewedWithoutEnd = isRenewal ? renewedOf(previousIds).filter((o) => !o.subsEndDate) : [];
+  // The start date follows the suggestion only while the AM hasn't chosen
+  // their own: when it is empty, or still the date suggested before this
+  // change. A date the AM picked stays (with its warning); a suggestion whose
+  // source is gone is cleared, so the AM is asked to choose.
   const chooseRenewed = (ids: string[]) => {
     setValue("previousOpportunityIds", ids, { shouldDirty: true });
+    const current = getValues("startDate");
+    if (current && current !== expectedStart?.date) return;
     const expected = expectedRenewalStart(renewedOf(ids));
-    if (expected) setValue("startDate", expected.date, { shouldDirty: true });
+    setValue("startDate", expected?.date ?? "", { shouldDirty: true });
   };
 
   // Watched, not read once: picking an account re-renders on its id before

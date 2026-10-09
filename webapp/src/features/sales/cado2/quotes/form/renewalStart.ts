@@ -15,8 +15,9 @@
 // under the License.
 
 // A renewal's start date (2026-10-09): the day after the renewed
-// opportunity's subscription end date, the same rule as the backend's
-// (quote/renewal.go). The AM may choose another day; the quote then warns.
+// opportunity's subscription end date. The CadO2 backend applies the same
+// rule to the version it stores. The AM may choose another day; the quote
+// then warns.
 //
 //   Renews "APIM Subs 2026"  ends 31 Jan 2027  →  starts 1 Feb 2027
 

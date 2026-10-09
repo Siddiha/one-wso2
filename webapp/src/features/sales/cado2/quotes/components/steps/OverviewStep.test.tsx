@@ -38,6 +38,10 @@ let oppCurrency = "USD";
 const wonList = [
   { ...renewal, id: "006W", name: "APIM Subs 2026", stageName: "Closed Won", isWon: true, isClosed: true,
     subsStartDate: "2026-02-01", subsEndDate: "2027-01-31" },
+  { ...renewal, id: "006X", name: "IS Subs 2026", stageName: "Closed Won", isWon: true, isClosed: true,
+    subsStartDate: "2026-04-01", subsEndDate: "2027-03-31" },
+  { ...renewal, id: "006N", name: "No dates", stageName: "Closed Won", isWon: true, isClosed: true,
+    subsStartDate: null, subsEndDate: null },
 ];
 /** Which lists were asked for: open by default, won for a renewal. */
 const asked: string[] = [];
@@ -229,5 +233,32 @@ describe("OverviewStep — Salesforce first (2026-09-28)", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Starts 1 Mar 2027, not 1 Feb 2027, the day after APIM Subs 2026 ends. Deal Desk will see this.",
     );
+  });
+
+  // Review: changing the renewed opportunities keeps a start date the AM chose…
+  it("keeps a start date the AM chose when the renewed opportunities change", async () => {
+    render(<Harness values={{ ...deal, previousOpportunityIds: ["006W"], startDate: "2027-03-01" }} locked />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Change selection" }));
+    await user.click(screen.getByRole("option", { name: "IS Subs 2026" }));
+
+    expect(screen.getByText("start: 2027-03-01")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("not 1 Apr 2027, the day after IS Subs 2026 ends");
+  });
+
+  // …but follows the suggestion while it is still the suggestion, and drops it when its source goes.
+  it("follows the suggestion, and clears it when no renewed opportunity has an end date", async () => {
+    render(<Harness values={deal} locked />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("option", { name: "APIM Subs 2026" }));
+    expect(screen.getByText("start: 2027-02-01")).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "IS Subs 2026" }));
+    expect(screen.getByText("start: 2027-04-01")).toBeInTheDocument(); // the latest end now
+
+    await user.click(screen.getByRole("option", { name: "APIM Subs 2026" }));
+    await user.click(screen.getByRole("option", { name: "IS Subs 2026" }));
+    await user.click(screen.getByRole("option", { name: "No dates" }));
+    expect(screen.getByText("start: none")).toBeInTheDocument();
+    expect(screen.getByText(/No dates has no\s+subscription end date in Salesforce/)).toBeInTheDocument();
   });
 });

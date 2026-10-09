@@ -58,6 +58,7 @@ describe("OpportunityPicker (F5 review: like the contact picker)", () => {
     expect(options().map((o) => o.getAttribute("aria-label"))).toEqual(["API Platform 2027", "Identity renewal FY26", "Choreo pilot"]);
     expect(options()[0]).toHaveTextContent("Subscription 1 Feb 2027 – 31 Jan 2028");
     expect(options()[2]).toHaveTextContent("No subscription dates in Salesforce");
+    expect(options()[1]).toHaveTextContent("Subscription 1 Jul 2025 – 30 Jun 2026");
     for (const o of options()) {
       expect(o).not.toHaveTextContent("Proposal");
       expect(o).not.toHaveTextContent(/Created|Closes/);
@@ -146,5 +147,17 @@ describe("OpportunityPicker (F5 review: like the contact picker)", () => {
     expect(screen.queryByText("Choose the opportunity this quote is for")).toBeNull(); // a choice is showing
     await userEvent.click(screen.getByRole("button", { name: "Change opportunity" }));
     expect(screen.getByText("Choose the opportunity this quote is for")).toBeInTheDocument();
+  });
+
+  // Review: the list must close even with nothing ticked.
+  it("keeps Done when every tick is removed", async () => {
+    render(<Harness multiple />);
+    const user = userEvent.setup();
+    await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: "Choreo pilot" }));
+    await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: "Choreo pilot" }));
+    expect(screen.getByText("Tick every one that applies")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Choose opportunity" })).toBeInTheDocument();
   });
 });

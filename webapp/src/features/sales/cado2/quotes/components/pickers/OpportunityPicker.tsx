@@ -18,8 +18,8 @@ import { useState, type JSX } from "react";
 import { Avatar, Box, Button, ButtonBase, Checkbox, Chip, IconButton, InputAdornment, Paper, Skeleton, Stack, TextField, Tooltip, Typography } from "@wso2/oxygen-ui";
 import { BriefcaseIcon, PlusIcon, SearchIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import type { Opportunity } from "@features/sales/cado2/quotes/api/quoteTypes";
-import { formatDate } from "@features/sales/cado2/quotes/form/draftForm";
 import { dealKindLabel } from "@features/sales/cado2/utils/dealKind";
+import { subscriptionLine } from "@features/sales/cado2/utils/subscription";
 
 interface OpportunityPickerProps {
   /** The list's accessible name, e.g. "Opportunity". */
@@ -43,14 +43,8 @@ interface OpportunityPickerProps {
 /**
  * The subscription the opportunity covers (2026-10-09: more telling than its
  * stage, created and close dates), e.g. "Subscription 1 Feb 2027 – 31 Jan 2028".
- * Undefined dates (a saved opportunity Salesforce no longer lists) say nothing.
  */
-const subscription = (o: Opportunity): string => {
-  if (o.subsStartDate === undefined && o.subsEndDate === undefined) return "Salesforce opportunity";
-  if (o.subsStartDate && o.subsEndDate) return `Subscription ${formatDate(o.subsStartDate)} – ${formatDate(o.subsEndDate)}`;
-  if (o.subsStartDate) return `Subscription from ${formatDate(o.subsStartDate)}`;
-  return "No subscription dates in Salesforce";
-};
+const subscription = (o: Opportunity): string => subscriptionLine(o) ?? "Salesforce opportunity";
 
 function KindChip({ o }: { o: Opportunity }): JSX.Element | null {
   const label = dealKindLabel(o);
@@ -209,11 +203,10 @@ export default function OpportunityPicker({
             <Typography variant="caption" color="text.secondary">
               {selected.length === 0 ? "Tick every one that applies" : `${selected.length} selected`}
             </Typography>
-            {selected.length > 0 ? (
-              <Button size="small" variant="contained" onClick={close}>
-                Done
-              </Button>
-            ) : null}
+            {/* Always there, so the list can be closed even with nothing ticked. */}
+            <Button size="small" variant="contained" onClick={close}>
+              Done
+            </Button>
           </Stack>
         ) : selected.length > 0 ? (
           <Stack direction="row" justifyContent="flex-end">
