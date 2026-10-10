@@ -32,11 +32,12 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { ArrowUpRightIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon } from "@wso2/oxygen-ui-icons-react";
+import { ArrowUpRightIcon, ChevronDownIcon, ChevronUpIcon, MailIcon } from "@wso2/oxygen-ui-icons-react";
 import { isCcBackendConfigured } from "@config/apiConfig";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import FinanceShell from "../../components/FinanceShell";
@@ -62,15 +63,16 @@ import {
   asOfDate,
   breakdownDateRange,
   buildBreakdown,
-  buildManagerReminderMessage,
+  buildManagerReminderMailto,
   reportingWindowLabel,
+  summarizeTeamUnsubmitted,
   summaryDateFrom,
   type CcGranularity,
   type CcSummaryPeriod,
 } from "../ccDashboard";
 import { FINANCE_EYEBROW } from "@constants/financeApps";
-import { CcLeadOverviewTable, CcLeadTeamTable } from "../CcLeadViewTables";
-import { useCcLeadApprovalSummary, useCcLeadTeamCardHolders } from "../useCc";
+import { CcLeadOverviewTable, CcLeadTeamTable, CcLeadTeamUnsubmittedTable } from "../CcLeadViewTables";
+import { useCcLeadApprovalSummary, useCcLeadTeamCardHolders, useCcLeadTeamUnsubmittedSummary } from "../useCc";
 import type { CcLeadApprovalSummary } from "../ccTypes";
 import { ccPaths } from "../ccPaths";
 
@@ -142,6 +144,7 @@ function DashboardBody() {
 
   const leads = useCcLeadApprovalSummary(showAllLeadsOverview && !viewingLead);
   const teamCardHolders = useCcLeadTeamCardHolders(showTeam ? viewingLead?.leadEmail : undefined);
+  const teamUnsubmitted = useCcLeadTeamUnsubmittedSummary(showTeam ? viewingLead?.leadEmail : undefined);
 
   const dateFrom = summaryDateFrom(period);
   // In Lead view the same two endpoints answer for one lead's team instead of
@@ -163,6 +166,24 @@ function DashboardBody() {
   const breakdown = useMemo(
     () => buildBreakdown(byCategory.data ?? [], granularity),
     [byCategory.data, granularity],
+  );
+
+  // Total/count tiles are summed from the already-fetched card-holder rows
+  // (CcLeadViewTables.tsx); the age-bucket $ values come from their own call,
+  // since the rows only carry bucket counts, not amounts.
+  const unsubmittedTotals = useMemo(
+    () => summarizeTeamUnsubmitted(teamCardHolders.data ?? [], teamUnsubmitted.data),
+    [teamCardHolders.data, teamUnsubmitted.data],
+  );
+
+  // The same rows also include card holders who have zero pending-approval
+  // items but do have unsubmitted work (kept so the Unsubmitted table below
+  // doesn't miss them). The Pending table, below, only cares about who
+  // actually has something awaiting approval, so it filters those zero rows
+  // back out rather than showing an all-dashes row for them.
+  const pendingCardHolders = useMemo(
+    () => (teamCardHolders.data ?? []).filter((holder) => holder.transactionCount > 0),
+    [teamCardHolders.data],
   );
 
   if (userInfo.isLoading) {
@@ -260,6 +281,8 @@ function DashboardBody() {
         </>
       )}
 
+      {/* Pending section: the approval-pending table and its four summary
+          cards stay together, as one block. */}
       {showTeam && viewingLead && (
         <>
           {teamCardHolders.isError ? (
@@ -269,7 +292,7 @@ function DashboardBody() {
           ) : (
             <CcLeadTeamTable
               leadName={viewingLead.leadName}
-              cardHolders={teamCardHolders.data ?? []}
+              cardHolders={pendingCardHolders}
               onBack={() => setSelectedLead(null)}
               // A lead has no all-leads table to return to; only finance does.
               canGoBack={isFinanceUser}
@@ -313,8 +336,70 @@ function DashboardBody() {
             unit="days"
             loading={summary.isLoading}
           />
-          <PendingByAge buckets={buckets} loading={summary.isLoading} />
+          <PendingByAge
+            buckets={buckets}
+            loading={summary.isLoading}
+          />
         </Box>
+      )}
+
+      {/* Unsubmitted section: work that never reached the approval queue at
+          all, as its own block below the pending one — table first, then its
+          own four summary cards, the same shape as the pending section above. */}
+      {showTeam && viewingLead && (
+        <>
+          {teamCardHolders.isError ? (
+            <Alert severity="error">{describeError(teamCardHolders.error)}</Alert>
+          ) : teamCardHolders.isLoading ? (
+            <Skeleton variant="rectangular" height={180} sx={{ borderRadius: 1.5 }} />
+          ) : (
+            <CcLeadTeamUnsubmittedTable
+              leadName={viewingLead.leadName}
+              cardHolders={teamCardHolders.data ?? []}
+            />
+          )}
+        </>
+      )}
+
+      {showTeam && (
+        teamUnsubmitted.isError ? (
+          <Alert severity="error">{describeError(teamUnsubmitted.error)}</Alert>
+        ) : (
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+              gap: 2,
+              alignItems: "stretch",
+            }}
+          >
+            <Stat
+              title="Total Unsubmitted Amount"
+              value={`${CURRENCY} ${wholeAmount(unsubmittedTotals.amount)}`}
+              loading={teamCardHolders.isLoading}
+            />
+            <Stat
+              title="Total Unsubmitted Transactions"
+              value={String(unsubmittedTotals.count)}
+              loading={teamCardHolders.isLoading}
+            />
+            <Stat
+              title="Avg. Days Outstanding"
+              value={
+                unsubmittedTotals.avgDaysOutstanding != null
+                  ? unsubmittedTotals.avgDaysOutstanding.toFixed(1)
+                  : "-"
+              }
+              unit="days"
+              loading={teamUnsubmitted.isLoading}
+            />
+            <PendingByAge
+              title="Unsubmitted by Age"
+              buckets={unsubmittedTotals.ageBuckets}
+              loading={teamCardHolders.isLoading || teamUnsubmitted.isLoading}
+            />
+          </Box>
+        )
       )}
 
       {showCompliance && (
@@ -491,9 +576,11 @@ function Stat({
 }
 
 function PendingByAge({
+  title = "Pending by Age",
   buckets,
   loading,
 }: {
+  title?: string;
   buckets: CcAgeBucketAmount[];
   loading: boolean;
 }) {
@@ -506,7 +593,7 @@ function PendingByAge({
         spacing={1}
       >
         <PanelTitle>
-          Pending by Age
+          {title}
           <br />
           (Value &amp; Count)
         </PanelTitle>
@@ -570,6 +657,16 @@ function ComplianceTable({
   onGroupByChange: (groupBy: "cardHolder" | "manager") => void;
 }) {
   const items = query.data ?? [];
+  // Client-side paging for the Card Holder view only — this list can run into
+  // the hundreds, and loading/scrolling through all of it at once was the complaint.
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+  // Clamped on every render, not synced via effect — if the data shrinks (a
+  // refetch, or switching group-by and back), this self-corrects instead of
+  // showing an empty page until something else triggers a reset.
+  const maxPage = Math.max(0, Math.ceil(items.length / rowsPerPage) - 1);
+  const currentPage = Math.min(page, maxPage);
+  const pagedItems = items.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage);
   return (
     <Panel>
       <Stack
@@ -621,7 +718,7 @@ function ComplianceTable({
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((row) => (
+              {pagedItems.map((row) => (
                 <TableRow key={row.employeeEmail} hover>
                   <Cell>{row.cardHolderName || row.employeeEmail}</Cell>
                   <Cell align="right">
@@ -646,6 +743,19 @@ function ComplianceTable({
               ))}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={items.length}
+            page={currentPage}
+            rowsPerPage={rowsPerPage}
+            rowsPerPageOptions={[15, 25, 50, 100]}
+            onPageChange={(_, next) => setPage(next)}
+            onRowsPerPageChange={(event) => {
+              setRowsPerPage(Number(event.target.value));
+              setPage(0);
+            }}
+            labelRowsPerPage="Rows per page"
+          />
         </Box>
       )}
     </Panel>
@@ -671,14 +781,22 @@ function ManagerComplianceTable({
   const items = query.data ?? [];
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
-  const { showSuccess, showError } = useNotifications();
+  const { showError } = useNotifications();
 
-  const copyReminder = async (manager: CcManagerCompliance) => {
-    try {
-      await navigator.clipboard.writeText(buildManagerReminderMessage(manager, CURRENCY));
-      showSuccess("Reminder copied to clipboard!");
-    } catch {
-      showError("Unable to copy the reminder — try again.");
+  // Same client-side paging as the Card Holder view — a manager list can also
+  // run long, and scrolling through all of it at once was the same complaint.
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const maxPage = Math.max(0, Math.ceil(items.length / rowsPerPage) - 1);
+  const currentPage = Math.min(page, maxPage);
+  const pagedItems = items.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage);
+
+  const emailReminder = (manager: CcManagerCompliance) => {
+    // Opens in a new tab/window so the SPA itself never navigates away. Most
+    // browsers hand this straight to the OS's mail client instead.
+    const opened = window.open(buildManagerReminderMailto(manager, CURRENCY), "_blank");
+    if (!opened) {
+      showError("Unable to open your email client — check your browser's popup settings.");
     }
   };
 
@@ -702,7 +820,7 @@ function ManagerComplianceTable({
             <HeadCell>{""}</HeadCell>
             <HeadCell>REPORTING MANAGER</HeadCell>
             <HeadCell align="right">REPORTS</HeadCell>
-            <HeadCell align="right">OUTSTANDING ({CURRENCY})</HeadCell>
+            <HeadCell align="right">UNSUBMITTED ({CURRENCY})</HeadCell>
             <HeadCell align="right">TXNS</HeadCell>
             <HeadCell align="right">AVG DAYS</HeadCell>
             <HeadCell align="right">0-7D</HeadCell>
@@ -713,7 +831,7 @@ function ManagerComplianceTable({
           </TableRow>
         </TableHead>
         <TableBody>
-          {items.map((manager) => {
+          {pagedItems.map((manager) => {
             const key = manager.managerEmail || "unassigned";
             const isOpen = !!expanded[key];
             const isUnassigned = manager.managerEmail === "";
@@ -743,16 +861,16 @@ function ManagerComplianceTable({
                     {manager.bucket30Plus}
                   </Cell>
                   <Cell align="right">
-                    <Tooltip title={isUnassigned ? "No reporting manager to remind" : "Copy a reminder for this manager"}>
+                    <Tooltip title={isUnassigned ? "No reporting manager to remind" : "Email this manager a reminder"}>
                       <span>
                         <IconButton
                           size="small"
-                          aria-label="Copy reminder"
+                          aria-label="Email reminder"
                           disabled={isUnassigned}
-                          onClick={() => void copyReminder(manager)}
+                          onClick={() => emailReminder(manager)}
                           sx={{ p: 0.5 }}
                         >
-                          <CopyIcon size={14} />
+                          <MailIcon size={14} />
                         </IconButton>
                       </span>
                     </Tooltip>
@@ -765,7 +883,7 @@ function ManagerComplianceTable({
                         <TableHead>
                           <TableRow>
                             <HeadCell>CARD HOLDER</HeadCell>
-                            <HeadCell align="right">OUTSTANDING ({CURRENCY})</HeadCell>
+                            <HeadCell align="right">UNSUBMITTED ({CURRENCY})</HeadCell>
                             <HeadCell align="right">TXNS</HeadCell>
                             <HeadCell align="right">AVG DAYS</HeadCell>
                             <HeadCell align="right">0-7D</HeadCell>
@@ -810,6 +928,19 @@ function ManagerComplianceTable({
           })}
         </TableBody>
       </Table>
+      <TablePagination
+        component="div"
+        count={items.length}
+        page={currentPage}
+        rowsPerPage={rowsPerPage}
+        rowsPerPageOptions={[15, 25, 50, 100]}
+        onPageChange={(_, next) => setPage(next)}
+        onRowsPerPageChange={(event) => {
+          setRowsPerPage(Number(event.target.value));
+          setPage(0);
+        }}
+        labelRowsPerPage="Rows per page"
+      />
     </Box>
   );
 }

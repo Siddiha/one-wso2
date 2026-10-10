@@ -204,6 +204,12 @@ export interface CcTransactionSummary {
   ageBuckets: Record<string, CcAgeBucketAmount>;
 }
 
+/** One lead's team not-yet-submitted summary — average age plus the age-bucket map. */
+export interface CcLeadTeamUnsubmittedSummary {
+  avgDaysOutstanding: number | null;
+  ageBuckets: Record<string, CcAgeBucketAmount>;
+}
+
 /** submittedExpensesByCategory.ts:22-26. `txnMonth` is "YYYY-MM". */
 export interface CcCategoryMonthAmount {
   category: string;
@@ -262,6 +268,10 @@ export interface CcLeadApprovalSummary {
   bucket8To14: number;
   bucket15To30: number;
   bucket30Plus: number;
+  // Work the lead's team has not submitted at all yet. It never reaches their approval
+  // queue, so none of the counts above account for it.
+  unsubmittedCount: number;
+  unsubmittedAmount: number;
 }
 
 /** One card holder inside a lead's team — `leadCompliance.ts:29-39`. */
@@ -275,4 +285,13 @@ export interface CcLeadTeamCardHolder {
   bucket8To14: number;
   bucket15To30: number;
   bucket30Plus: number;
+  // Work this card holder has not submitted at all yet. It never reaches the lead's
+  // approval queue, so none of the pending fields above account for it.
+  unsubmittedCount: number;
+  unsubmittedAmount: number;
+  oldestUnsubmittedDays: number;
+  unsubmittedBucket0To7: number;
+  unsubmittedBucket8To14: number;
+  unsubmittedBucket15To30: number;
+  unsubmittedBucket30Plus: number;
 }

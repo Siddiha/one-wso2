@@ -162,10 +162,24 @@ describe("the manager reminder", () => {
     const message = buildManagerReminderMessage(manager, "USD");
     expect(message.split("\n")).toEqual([
       "Hi Lead, 2 of your direct reports have unsubmitted credit card transactions:",
-      "- Late Filer: 2 items, USD 700",
-      "- quiet@wso2.com: 1 item, USD 500",
+      "- Late Filer: 2 items, USD 700, avg 41.5 days pending",
+      "- quiet@wso2.com: 1 item, USD 500, avg 5.0 days pending",
+      "Total unsubmitted across your team: 5 transactions, USD 1,200, avg 20.0 days outstanding.",
+      "Unsubmitted by age:",
+      "- 0-7 days: 1",
+      "- 8-14 days: 1",
+      "- 15-30 days: 2",
+      "- 30+ days: 1",
       "Please remind them to submit their claims promptly.",
     ]);
+  });
+
+  it("leaves the average off a report that has no submit history to average", () => {
+    const noHistory = { ...manager.reports[0], avgDaysToSubmit: null };
+    const message = buildManagerReminderMessage({ ...manager, reports: [noHistory] }, "USD");
+
+    expect(message).toContain("- Late Filer: 2 items, USD 700\n");
+    expect(message).not.toContain("avg null");
   });
 
   it("uses a single report's wording when only one is outstanding", () => {

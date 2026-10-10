@@ -32,6 +32,7 @@ import type {
   CcJobNumberDetails,
   CcLeadApprovalSummary,
   CcLeadTeamCardHolder,
+  CcLeadTeamUnsubmittedSummary,
   CcJobNumberList,
   CcTransactionSummary,
   CcProductAndBusinessUnitList,
@@ -348,6 +349,25 @@ export function useCcLeadTeamCardHolders(leadEmail: string | undefined) {
     dashboardQuery<CcLeadTeamCardHolder[]>(
       ["cc-lead-team-cardholders", leadEmail ?? null],
       scoped(ccServiceUrls.leadTeamCardHolders, { leadEmail }),
+      Boolean(leadEmail) && isSignedIn && configured,
+      getAccessToken,
+    ),
+  );
+}
+
+/**
+ * One lead's team's not-yet-submitted summary — average age plus the per-bucket
+ * value figures, which the per-card-holder rows (CcLeadViewTables.tsx) don't
+ * carry (those only have bucket counts).
+ */
+export function useCcLeadTeamUnsubmittedSummary(leadEmail: string | undefined) {
+  const { isSignedIn } = useAsgardeo();
+  const getAccessToken = useAccessToken();
+  const configured = isCcBackendConfigured();
+  return useQuery<CcLeadTeamUnsubmittedSummary>(
+    dashboardQuery<CcLeadTeamUnsubmittedSummary>(
+      ["cc-lead-team-unsubmitted-summary", leadEmail ?? null],
+      scoped(ccServiceUrls.leadTeamUnsubmittedSummary, { leadEmail }),
       Boolean(leadEmail) && isSignedIn && configured,
       getAccessToken,
     ),

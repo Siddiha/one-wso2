@@ -86,6 +86,17 @@ vi.mock("../useCc", () => ({
     asked.leadTeam.push({ leadEmail });
     return { data: leadFixtures.team, isLoading: false, isError: false };
   },
+  useCcLeadTeamUnsubmittedSummary: () => ({
+    data: {
+      avgDaysOutstanding: 9.5,
+      ageBuckets: {
+        a: { label: "0-7 days", amount: 100, count: 1 },
+        b: { label: "30+ days", amount: 50, count: 1 },
+      },
+    },
+    isLoading: false,
+    isError: false,
+  }),
   useCcTransactionSummary: (dateFrom: string | undefined, ownedCardsOnly: boolean, leadEmail?: string) => {
     asked.summary.push({ dateFrom, ownedCardsOnly, leadEmail });
     return {
@@ -216,7 +227,7 @@ describe("who sees what", () => {
   it("opens a lead on their own team's queue", () => {
     role.privileges = ["employee", "lead"];
     render();
-    expect(screen.getByText(/'s team/)).toBeInTheDocument();
+    expect(screen.getAllByText(/'s team/).length).toBeGreaterThan(0);
     // Their own email, without going through a picker — they are the lead.
     expect(asked.leadTeam.at(-1)?.leadEmail).toBe("me@wso2.com");
     // And the all-leads overview is never fetched for them.
@@ -259,7 +270,7 @@ describe("who sees what", () => {
     expect(screen.getByText("Approvals waiting on each lead")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /View Lead Person's team/ }));
 
-    expect(screen.getByText("Lead Person's team")).toBeInTheDocument();
+    expect(screen.getByText("Lead Person's team (Pending)")).toBeInTheDocument();
     expect(asked.leadTeam.at(-1)?.leadEmail).toBe("lead@wso2.com");
     // The figures follow the lead being read, not the whole company.
     expect(asked.summary.at(-1)?.leadEmail).toBe("lead@wso2.com");
@@ -413,16 +424,29 @@ describe("the reporting-manager grouping", () => {
     expect(screen.getByText("Late Filer")).toBeInTheDocument();
   });
 
-  it("copies a reminder for the manager to the clipboard", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  it("opens a mailto reminder for the manager instead of sending it from the app", async () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue({} as Window);
     await groupByManager();
 
-    await userEvent.click(screen.getByRole("button", { name: "Copy reminder" }));
+    await userEvent.click(screen.getByRole("button", { name: "Email reminder" }));
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    const copied = writeText.mock.calls[0][0] as string;
-    expect(copied).toContain("Hi Lead, 1 of your direct reports has unsubmitted credit card transactions:");
-    expect(copied).toContain("- Late Filer: 2 items, USD 700");
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [url, target] = openSpy.mock.calls[0];
+    expect(target).toBe("_blank");
+    expect(url).toContain("mailto:lead%40wso2.com");
+    const decoded = decodeURIComponent(url as string);
+    expect(decoded).toContain("Hi Lead, 1 of your direct reports has unsubmitted credit card transactions:");
+    expect(decoded).toContain("- Late Filer: 2 items, USD 700");
+  });
+
+  it("warns when the browser blocks the mailto popup", async () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+    await groupByManager();
+
+    await userEvent.click(screen.getByRole("button", { name: "Email reminder" }));
+
+    expect(notify.showError).toHaveBeenCalledWith(
+      "Unable to open your email client — check your browser's popup settings.",
+    );
   });
 });

@@ -46,7 +46,7 @@ const CURRENCY = "USD";
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1.5, p: 2 }}>
-      <Typography sx={{ fontSize: 14.5, fontWeight: 600, mb: 1 }}>{title}</Typography>
+      <Typography sx={{ fontSize: 18, fontWeight: 700, color: "text.primary", mb: 1.25 }}>{title}</Typography>
       {children}
     </Box>
   );
@@ -75,17 +75,17 @@ export function CcLeadOverviewTable({
             <TableCell align="right">Submitters</TableCell>
             <TableCell align="right">Pending Txns</TableCell>
             <TableCell align="right">Pending Amount</TableCell>
-            <TableCell align="right">0-7d</TableCell>
-            <TableCell align="right">8-14d</TableCell>
-            <TableCell align="right">15-30d</TableCell>
-            <TableCell align="right">30+d</TableCell>
+            {/* Not submitted at all yet — never reaches the lead's approval queue, so it
+                is invisible in every other column on this row. */}
+            <TableCell align="right">Unsubmitted Txns</TableCell>
+            <TableCell align="right">Unsubmitted Amount</TableCell>
             <TableCell align="right">Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {leads.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} align="center" sx={{ fontSize: 13, color: "text.secondary" }}>
+              <TableCell colSpan={7} align="center" sx={{ fontSize: 13, color: "text.secondary" }}>
                 Nothing is waiting on any lead.
               </TableCell>
             </TableRow>
@@ -100,16 +100,10 @@ export function CcLeadOverviewTable({
                 <TableCell align="right" sx={NUM_SX}>{lead.submitterCount}</TableCell>
                 <TableCell align="right" sx={NUM_SX}>{lead.transactionCount}</TableCell>
                 <TableCell align="right" sx={NUM_SX}>{money(lead.pendingAmount, CURRENCY)}</TableCell>
-                <TableCell align="right" sx={NUM_SX}>{lead.bucket0To7}</TableCell>
-                <TableCell align="right" sx={NUM_SX}>{lead.bucket8To14}</TableCell>
-                <TableCell align="right" sx={NUM_SX}>{lead.bucket15To30}</TableCell>
-                {/* The column that matters: anything here has been waiting a month. */}
-                <TableCell
-                  align="right"
-                  sx={{ ...NUM_SX, fontWeight: 600, color: lead.bucket30Plus > 0 ? "error.main" : undefined }}
-                >
-                  {lead.bucket30Plus}
-                </TableCell>
+                <TableCell align="right" sx={NUM_SX}>{lead.unsubmittedCount}</TableCell>
+                <TableCell align="right" sx={NUM_SX}>{money(lead.unsubmittedAmount, CURRENCY)}</TableCell>
+                {/* The 0-7d/8-14d/15-30d/30+d age breakdown moved to the per-card-holder
+                    drill-down (View team) — this row is the summary, not the detail. */}
                 <TableCell align="right">
                   <Button
                     size="small"
@@ -151,7 +145,7 @@ export function CcLeadTeamTable({
   canGoBack: boolean;
 }) {
   return (
-    <Panel title={`${leadName}'s team`}>
+    <Panel title={`${leadName}'s team (Pending)`}>
       {canGoBack && (
         <Stack direction="row" sx={{ mb: 1 }}>
           <Button size="small" onClick={onBack} sx={{ textTransform: "none" }}>
@@ -200,6 +194,72 @@ export function CcLeadTeamTable({
                   sx={{ ...NUM_SX, fontWeight: 600, color: holder.bucket30Plus > 0 ? "error.main" : undefined }}
                 >
                   {holder.bucket30Plus}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </Panel>
+  );
+}
+
+/**
+ * The same team's not-yet-submitted backlog, as its own table rather than
+ * extra columns bolted onto `CcLeadTeamTable` above — this is work that never
+ * reached the lead's approval queue at all, so it reads as a separate concern,
+ * not a detail of the pending one.
+ */
+export function CcLeadTeamUnsubmittedTable({
+  leadName,
+  cardHolders,
+}: {
+  leadName: string;
+  cardHolders: CcLeadTeamCardHolder[];
+}) {
+  return (
+    <Panel title={`${leadName}'s team (Unsubmitted)`}>
+      <Table size="small">
+        <TableHead>
+          <TableRow sx={HEAD_SX}>
+            <TableCell>Card Holder</TableCell>
+            <TableCell align="right">Unsubmitted Txns</TableCell>
+            <TableCell align="right">Unsubmitted Amount</TableCell>
+            <TableCell align="right">Oldest Unsubmitted</TableCell>
+            <TableCell align="right">0-7d</TableCell>
+            <TableCell align="right">8-14d</TableCell>
+            <TableCell align="right">15-30d</TableCell>
+            <TableCell align="right">30+d</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {cardHolders.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={8} align="center" sx={{ fontSize: 13, color: "text.secondary" }}>
+                Nothing unsubmitted in this team.
+              </TableCell>
+            </TableRow>
+          ) : (
+            cardHolders.map((holder) => (
+              <TableRow key={holder.employeeEmail} hover>
+                <TableCell sx={{ fontSize: 12.5 }}>
+                  <Typography sx={{ fontSize: 12.5 }} title={holder.employeeEmail}>
+                    {holder.cardHolderName || holder.employeeEmail}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={NUM_SX}>{holder.unsubmittedCount}</TableCell>
+                <TableCell align="right" sx={NUM_SX}>{money(holder.unsubmittedAmount, CURRENCY)}</TableCell>
+                <TableCell align="right" sx={NUM_SX}>
+                  {holder.oldestUnsubmittedDays > 0 ? `${holder.oldestUnsubmittedDays}d` : "—"}
+                </TableCell>
+                <TableCell align="right" sx={NUM_SX}>{holder.unsubmittedBucket0To7}</TableCell>
+                <TableCell align="right" sx={NUM_SX}>{holder.unsubmittedBucket8To14}</TableCell>
+                <TableCell align="right" sx={NUM_SX}>{holder.unsubmittedBucket15To30}</TableCell>
+                <TableCell
+                  align="right"
+                  sx={{ ...NUM_SX, fontWeight: 600, color: holder.unsubmittedBucket30Plus > 0 ? "error.main" : undefined }}
+                >
+                  {holder.unsubmittedBucket30Plus}
                 </TableCell>
               </TableRow>
             ))
