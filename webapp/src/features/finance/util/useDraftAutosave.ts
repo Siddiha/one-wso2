@@ -36,32 +36,52 @@ export function useDraftAutosave(
   delay = 1000,
   initialBaseline?: string,
 ): DraftState {
-  const [state, setState] = useState<DraftState>("idle");
-  // baseline = last persisted signature (seeded on first ready render, then
-  // advanced after each successful save). Read once, at mount: a later
-  // `initialBaseline` is ignored, the same way the first ready snapshot is.
-  const baseline = useRef<string | null>(initialBaseline ?? null);
+  // baseline = last persisted signature. State rather than a ref because the
+  // returned chip is derived from it during render, and reading a ref while
+  // rendering is what react-hooks/refs forbids.
+  const [baseline, setBaseline] = useState<string | null>(initialBaseline ?? null);
+  // The result of the last completed save, tied to the signature it saved, so
+  // it is dropped as soon as the list moves on. Only ever set from the
+  // promise's callbacks, never synchronously inside an effect.
+  const [outcome, setOutcome] = useState<{ signature: string; state: "saved" | "error" } | null>(
+    null,
+  );
+
+  // First value seen while ready = the hydrated/seeded state; adopt it as the
+  // baseline so it is not saved straight back. Done during render — React's
+  // documented way to adjust state when inputs change — rather than in an
+  // effect, which would be a synchronous setState in an effect body.
+  if (ready && baseline === null) {
+    setBaseline(signature);
+  }
+
   const runRef = useRef(run);
-  runRef.current = run;
+  // Synced in an effect, not during render: a ref write while rendering is
+  // what react-hooks/refs forbids. Declared BEFORE the save effect so React
+  // runs it first on every commit, which means the save below reads the
+  // closure from the render that changed the signature — the one holding the
+  // edited items. No dep array: `run` is a new closure each render.
+  useEffect(() => {
+    runRef.current = run;
+  });
+
   // Holds a queued (debounced-but-not-yet-run) save so it can be flushed on
   // unmount instead of silently dropped.
   const pendingRef = useRef<null | (() => Promise<void>)>(null);
 
+  // Everything the caller sees follows from these two, so no effect has to
+  // push a state change to keep the chip in step.
+  const dirty = ready && baseline !== null && signature !== baseline;
+  const state: DraftState =
+    outcome?.signature === signature ? outcome.state : dirty ? "saving" : "idle";
+
   useEffect(() => {
-    if (!ready) return;
-    // First value seen while ready = the hydrated/seeded state; don't save it.
-    if (baseline.current === null) {
-      baseline.current = signature;
-      return;
-    }
-    // Reverted back to the last-saved state — nothing to persist. Reset the
-    // chip (otherwise it stays stuck on "Saving…" from the change we undid).
-    if (signature === baseline.current) {
+    if (!dirty) {
+      // Reverted to the last-saved state: drop the queued save so leaving the
+      // page does not write back a change that was undone.
       pendingRef.current = null;
-      setState("idle");
       return;
     }
-    setState("saving");
     const target = signature;
     const fn = runRef.current;
     pendingRef.current = fn;
@@ -69,13 +89,13 @@ export function useDraftAutosave(
       pendingRef.current = null;
       fn()
         .then(() => {
-          baseline.current = target;
-          setState("saved");
+          setBaseline(target);
+          setOutcome({ signature: target, state: "saved" });
         })
-        .catch(() => setState("error"));
+        .catch(() => setOutcome({ signature: target, state: "error" }));
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [signature, ready, delay]);
+  }, [dirty, signature, delay]);
 
   // Flush a still-queued save when the component unmounts, so leaving within
   // the debounce window doesn't drop the last edit.

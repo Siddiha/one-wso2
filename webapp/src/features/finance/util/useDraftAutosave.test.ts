@@ -95,3 +95,85 @@ describe("a caller that names the persisted state up front", () => {
     expect(run).not.toHaveBeenCalled();
   });
 });
+
+// The hook keeps `run` in a ref so a change of signature does not re-arm the
+// debounce every time the caller re-renders with a fresh closure. These pin
+// WHICH closure a save ends up calling, so the ref can be rewritten without
+// quietly saving against a stale one.
+describe("which run callback a save uses", () => {
+  it("calls the callback from the render that changed the signature", async () => {
+    const first = vi.fn(async () => {});
+    const second = vi.fn(async () => {});
+    const { rerender } = renderHook(({ sig, run }) => useDraftAutosave(sig, true, run), {
+      initialProps: { sig: "a", run: first },
+    });
+
+    // The signature changes and the caller hands over a new closure in the
+    // same render — that is the one holding the edited items.
+    rerender({ sig: "b", run: second });
+    await elapse();
+
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it("ignores a closure that arrives after the debounce was armed", async () => {
+    const armed = vi.fn(async () => {});
+    const later = vi.fn(async () => {});
+    const { rerender } = renderHook(({ sig, run }) => useDraftAutosave(sig, true, run), {
+      initialProps: { sig: "a", run: armed },
+    });
+
+    rerender({ sig: "b", run: armed });
+    // A re-render with no signature change must not swap the queued callback.
+    rerender({ sig: "b", run: later });
+    await elapse();
+
+    expect(armed).toHaveBeenCalledTimes(1);
+    expect(later).not.toHaveBeenCalled();
+  });
+});
+
+// Leaving the page inside the debounce window must not drop the edit.
+describe("the flush on unmount", () => {
+  it("runs a queued save when the hook unmounts early", async () => {
+    const run = vi.fn(async () => {});
+    const { rerender, unmount } = renderHook(({ sig }) => useDraftAutosave(sig, true, run), {
+      initialProps: { sig: "a" },
+    });
+
+    rerender({ sig: "b" });
+    // Unmount before the debounce elapses.
+    await act(async () => {
+      unmount();
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not run twice when the debounce already fired", async () => {
+    const run = vi.fn(async () => {});
+    const { rerender, unmount } = renderHook(({ sig }) => useDraftAutosave(sig, true, run), {
+      initialProps: { sig: "a" },
+    });
+
+    rerender({ sig: "b" });
+    await elapse();
+    await act(async () => {
+      unmount();
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not save on unmount when nothing was queued", async () => {
+    const run = vi.fn(async () => {});
+    const { unmount } = renderHook(() => useDraftAutosave("a", true, run));
+
+    await act(async () => {
+      unmount();
+    });
+
+    expect(run).not.toHaveBeenCalled();
+  });
+});
