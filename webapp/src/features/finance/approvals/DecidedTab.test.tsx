@@ -80,6 +80,23 @@ vi.mock("../expense/useExpense", () => ({
   useExpenseEmployees: () => ({ data: [], isLoading: false, isError: false }),
 }));
 
+// Subsidiary master data, for the entity dropdown. Mocked so these tests do not
+// start a real query — an extra hook means an extra render, which would double
+// what the recording mocks below see.
+vi.mock("../expense/dashboard/useExpenseDashboard", () => ({
+  useExpenseSubsidiaries: () => ({
+    data: [
+      { id: 1, code: "WSO2 - SRI LANKA", legalName: "WSO2 Lanka (Pvt) Ltd", currencyCode: "LKR", country: "Sri Lanka" },
+      { id: 2, code: "WSO2 - US", legalName: "WSO2 LLC", currencyCode: "USD", country: "United States" },
+      // Two codes, one legal name — the country disambiguates them.
+      { id: 3, code: "WSO2 - UK", legalName: "WSO2 (UK) LIMITED", currencyCode: "GBP", country: "United Kingdom" },
+      { id: 4, code: "WSO2 - SPAIN", legalName: "WSO2 (UK) LIMITED", currencyCode: "EUR", country: "Spain" },
+    ],
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("../opd/useOpd", () => ({
   useOpdUserInfo: () => ({
     data: { userRoles: flags.opd ? [555] : [444] },
@@ -188,6 +205,34 @@ const show = () =>
     </QueryClientProvider>,
   );
 
+// The claim id and email filters live inside the Advanced Filter popover now,
+// behind an Apply — so setting one means opening the panel, as a reader does.
+// Each narrowing field is an Autocomplete now, typed into or picked from.
+// There is no "All ..." option: clearing the field is what "all" means, so a
+// label starting with "All" clears instead of selecting.
+const pickInField = async (fieldLabel: string, optionLabel: string) => {
+  const input = await screen.findByLabelText(fieldLabel);
+  const field = input.closest(".MuiAutocomplete-root") as HTMLElement;
+  if (optionLabel.startsWith("All ")) {
+    await userEvent.click(within(field).getByTitle("Clear"));
+    return;
+  }
+  await userEvent.click(input);
+  await userEvent.click(await screen.findByRole("option", { name: optionLabel }));
+};
+
+const applyClaimType = async (label: string) => {
+  await userEvent.click(await screen.findByRole("button", { name: /Advanced Filter/ }));
+  await pickInField("Filter by Claim Type", label);
+  await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+};
+
+const applyClaimId = async (value: string) => {
+  await userEvent.click(await screen.findByRole("button", { name: /Advanced Filter/ }));
+  fireEvent.change(await screen.findByLabelText("Filter by Claim ID"), { target: { value } });
+  await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+};
+
 // The bug this file exists for: a queue disabled because the person lacks that
 // role stays `pending` in React Query, so a screen waiting on `isPending` never
 // leaves its skeleton.
@@ -263,9 +308,7 @@ describe("narrowing by employee or claim id", () => {
   it("narrows every queue to one claim id", async () => {
     data.finance = [expenseClaim({})];
     show();
-    fireEvent.change(await screen.findByLabelText("Filter by claim ID"), {
-      target: { value: "C-42" },
-    });
+    await applyClaimId("C-42");
     await waitFor(() => expect(searches.expense.at(-1)?.ids).toEqual(["C-42"]));
     expect(searches.opd.at(-1)?.ids).toEqual(["C-42"]);
   });
@@ -549,5 +592,33 @@ describe("opening an expense claim", () => {
     within(row).getByRole("button", { name: "View" }).click();
     const review = await screen.findByTestId("expense-review");
     expect(review).toHaveAttribute("data-stage", "FINANCE");
+  });
+});
+
+// Decided shows both claim types with no stage toggle, so the type filter is
+// the only way to read one of them on its own.
+describe("narrowing Decided by claim type", () => {
+  it("shows one claim type at a time", async () => {
+    data.finance = [expenseClaim({})];
+    data.opd = [opdClaim({})];
+    show();
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+
+    await applyClaimType("Expense Claims");
+    expect(screen.queryByText("OPD-1")).not.toBeInTheDocument();
+
+    await applyClaimType("All Claim Types");
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+  });
+
+  // Offering it would be a choice that can never match, with nothing visible
+  // to clear it with afterwards.
+  it("hides the claim-type filter from someone with no OPD role", async () => {
+    flags.opd = false;
+    data.finance = [expenseClaim({})];
+    show();
+    expect(await screen.findByText("EXP-1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Advanced Filter/ }));
+    expect(screen.queryByLabelText("Filter by Claim Type")).not.toBeInTheDocument();
   });
 });

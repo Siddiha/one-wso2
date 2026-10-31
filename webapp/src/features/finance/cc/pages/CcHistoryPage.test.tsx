@@ -355,10 +355,10 @@ describe("the history grid says what the source says", () => {
     show();
     await screen.findByRole("columnheader", { name: "Amount($)" });
     // utils.ts:44-49 — formatCurrency renders a bare number; the ($) in the
-    // header is what names the currency. Rendering "$500.00" under it shows
+    // header is what names the currency. Rendering "USD 500.00" under it shows
     // the symbol twice.
     expect(screen.getAllByText("500.00").length).toBeGreaterThan(0);
-    expect(screen.queryByText("$500.00")).toBeNull();
+    expect(screen.queryByText("USD 500.00")).toBeNull();
   });
 
   it("marks a transaction whose card has been closed", async () => {

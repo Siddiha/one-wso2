@@ -270,7 +270,7 @@ describe("a saved draft is offered, not assumed", () => {
     // "Reimbursement Amount" figure, so two copies is what a one-line claim
     // looks like.
     await waitFor(() =>
-      expect(screen.getAllByText("Rs. 12,000.00").length).toBeGreaterThanOrEqual(2),
+      expect(screen.getAllByText("LKR 12,000.00").length).toBeGreaterThanOrEqual(2),
     );
   });
 
@@ -503,7 +503,7 @@ describe("correcting a line", () => {
     // 50 USD at the mocked rate of 300 = 15,000 reimbursed — shown on both the
     // item's own figure and the claim's Total Amount row.
     await waitFor(() =>
-      expect(screen.getAllByText("Rs. 15,000.00").length).toBeGreaterThanOrEqual(2),
+      expect(screen.getAllByText("LKR 15,000.00").length).toBeGreaterThanOrEqual(2),
     );
   });
 
@@ -733,7 +733,7 @@ describe("converting a foreign-currency amount", () => {
     fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "50" } });
 
     // 50 USD at the mocked rate of 300.
-    expect(await screen.findByText("Rs. 15,000.00")).toBeInTheDocument();
+    expect(await screen.findByText("LKR 15,000.00")).toBeInTheDocument();
     expect(screen.getByText("(1 USD = 300 LKR)")).toBeInTheDocument();
   });
 
@@ -757,12 +757,12 @@ describe("converting a foreign-currency amount", () => {
 
     // The line, and the card's Total Amount footer, both in LKR.
     await waitFor(() =>
-      expect(screen.getAllByText("Rs. 15,000.00").length).toBeGreaterThanOrEqual(2),
+      expect(screen.getAllByText("LKR 15,000.00").length).toBeGreaterThanOrEqual(2),
     );
-    expect(screen.getByText("Total Amount:").parentElement).toHaveTextContent("Rs. 15,000.00");
+    expect(screen.getByText("Total Amount:").parentElement).toHaveTextContent("LKR 15,000.00");
   });
 
-  // A missing rate must NOT collapse to 1: that would price 50 USD as Rs. 50
+  // A missing rate must NOT collapse to 1: that would price 50 USD as LKR 50
   // and let the raw foreign amount through as if it were already converted.
   it("refuses to price a line when no rate covers the currency", async () => {
     state.rates = [{ currencyCode: "USD", exchangeRate: 300 }, { currencyCode: "EUR", exchangeRate: 0 }];
@@ -771,7 +771,7 @@ describe("converting a foreign-currency amount", () => {
     fireEvent.mouseDown(screen.getByLabelText("Currency"));
     fireEvent.click(await screen.findByRole("option", { name: "USD" }));
     fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "50" } });
-    expect(await screen.findByText("Rs. 15,000.00")).toBeInTheDocument();
+    expect(await screen.findByText("LKR 15,000.00")).toBeInTheDocument();
 
     // Now drop the rate list, as a date with no published rates would.
     state.rates = [];
@@ -781,8 +781,8 @@ describe("converting a foreign-currency amount", () => {
 
     expect(await screen.findByText(/No exchange rate available for USD/)).toBeInTheDocument();
     // Neither converted nor passed through raw.
-    expect(screen.queryByText("Rs. 15,000.00")).not.toBeInTheDocument();
-    expect(screen.queryByText("Rs. 50.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("LKR 15,000.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("LKR 50.00")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add expense" })).toBeDisabled();
   });
 });

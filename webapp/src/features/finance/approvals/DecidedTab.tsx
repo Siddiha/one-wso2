@@ -16,10 +16,9 @@
  * under the License.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
   Chip,
@@ -35,16 +34,25 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
-import { withLoadingAdornment } from "@components/picker-loading/pickerLoading";
 import { describeError } from "../util/financeError";
 import { formatNice, money } from "../util/financeFormat";
 import { useExpenseAppData, useExpenseClaims, useExpenseEmployees } from "../expense/useExpense";
 import { useOpdClaims, useOpdEmployees, useOpdUserInfo } from "../opd/useOpd";
+import { useExpenseSubsidiaries } from "../expense/dashboard/useExpenseDashboard";
 import { OPD_ROLE, opdHasRole } from "../opd/opdTypes";
 import type { ExpenseClaim } from "../expense/expenseTypes";
 import type { OpdClaim } from "../opd/opdTypes";
 import { ExpenseApprovalReview } from "../expense/approvals/ExpenseApprovalReview";
 import { makeNameResolver } from "../expense/approvals/expenseApprovalTypes";
+import {
+  buildEntityOptions,
+  EMPTY_CLAIM_FILTERS,
+  hasActiveClaimFilters,
+  matchesClaimSearch,
+  showsKind,
+  type ClaimApprovalDraftFilters,
+} from "./claimSearch";
+import { ClaimApprovalFilters } from "./ClaimApprovalFilters";
 import { OpdApprovalReview } from "../opd/approvals/OpdApprovalReview";
 import { ClaimGroupHeading, useCollapsedGroups } from "./ClaimGroupHeading";
 
@@ -87,13 +95,31 @@ export default function DecidedTab() {
   );
   const employeesLoading = employees.isLoading || opdEmployees.isLoading;
 
+  // Claimant -> legal entity. The HRIS calls it `company` and returns a
+  // subsidiary CODE; the master data turns that into the legal name Finance
+  // reads. Built from the expense directory alone: it is the one that carries
+  // `company`, and an OPD-only claimant simply has no entity to filter on.
+  const subsidiaries = useExpenseSubsidiaries();
+  const entityByEmail = useMemo(
+    () => new Map((employees.data ?? []).map((e) => [e.workEmail, e.company ?? ""])),
+    [employees.data],
+  );
+  const entityOptions = useMemo(
+    () => buildEntityOptions(entityByEmail.values(), subsidiaries.data),
+    [entityByEmail, subsidiaries.data],
+  );
+
   // FilterHolder.tsx-style narrowing: a claim of a known employee or id,
   // without which the only way to find one is to scroll the whole company's.
-  const [employee, setEmployee] = useState<string | null>(null);
-  const [claimId, setClaimId] = useState("");
+  // Same split as Needs You: a draft the panel edits, and the applied set the
+  // queues read, because `employee` and `claimId` are query parameters.
+  const [draft, setDraft] = useState<ClaimApprovalDraftFilters>(EMPTY_CLAIM_FILTERS);
+  const [applied, setApplied] = useState<ClaimApprovalDraftFilters>(EMPTY_CLAIM_FILTERS);
+  const { employee } = applied;
+  const [search, setSearch] = useState("");
   // Debounced before it reaches the queries: they key on the whole payload, so
   // the raw value would fire a search per keystroke.
-  const claimIdFilter = useDebouncedValue(claimId.trim());
+  const claimIdFilter = useDebouncedValue(applied.claimId.trim());
   const ids = claimIdFilter ? [claimIdFilter] : undefined;
 
   // A lead's decided queue is the claims they forwarded or turned down, so it is
@@ -135,19 +161,55 @@ export default function DecidedTab() {
   // in exactly one tab, none of them hidden.
   const [outcome, setOutcome] = useState<DecidedOutcome>("approved");
 
+  // Someone without the OPD role never sees an OPD claim, so offering to filter
+  // by type would be a dead choice — and a hidden control must stop narrowing,
+  // or they would be stuck on "OPD claims" with nothing to clear it with.
+  // An unset filter matches everything. A claimant the directory has no entry
+  // for is NOT dropped when no entity is chosen, but cannot match a specific
+  // one — there is nothing to match them on.
+  // The entity LABEL for a claimant, so the search box matches the same words
+  // the Entity dropdown shows ("WSO2 Lanka (Pvt) Ltd"), not the HRIS code.
+  const entityFor = useCallback(
+    (email: string) => {
+      const code = entityByEmail.get(email);
+      if (!code) return "";
+      const option = entityOptions.find((o) => o.code === code);
+      // Both, so the code still matches for anyone typing "WSO2 - SRI LANKA".
+      return option ? `${option.label} ${code}` : code;
+    },
+    [entityByEmail, entityOptions],
+  );
+
+  const entityCode = applied.entityCode;
+  const matchesEntity = useCallback(
+    (email: string) => entityCode === "" || entityByEmail.get(email) === entityCode,
+    [entityCode, entityByEmail],
+  );
+
+  const showsTypeFilter = canOpd;
+  const effectiveKind = showsTypeFilter ? applied.kind : "all";
+
   const expenseRows = useMemo(
     () =>
-      [...(financeDecided.data ?? []), ...(leadDecided.data ?? [])].filter(
-        (c) => isRejectedOutcome(c.statusDetails.status) === (outcome === "rejected"),
-      ),
-    [financeDecided.data, leadDecided.data, outcome],
+      !showsKind(effectiveKind, "expense")
+        ? []
+        : [...(financeDecided.data ?? []), ...(leadDecided.data ?? [])].filter(
+            (c) =>
+              isRejectedOutcome(c.statusDetails.status) === (outcome === "rejected") &&
+              matchesClaimSearch(c, search, nameFor, entityFor) && matchesEntity(c.employeeEmail),
+          ),
+    [financeDecided.data, leadDecided.data, outcome, effectiveKind, search, nameFor, entityFor, matchesEntity],
   );
   const opdRows = useMemo(
     () =>
-      (opdDecided.data ?? []).filter(
-        (c) => isRejectedOutcome(c.statusDetails.status) === (outcome === "rejected"),
-      ),
-    [opdDecided.data, outcome],
+      !showsKind(effectiveKind, "opd")
+        ? []
+        : (opdDecided.data ?? []).filter(
+            (c) =>
+              isRejectedOutcome(c.statusDetails.status) === (outcome === "rejected") &&
+              matchesClaimSearch(c, search, nameFor, entityFor) && matchesEntity(c.employeeEmail),
+          ),
+    [opdDecided.data, outcome, effectiveKind, search, nameFor, entityFor, matchesEntity],
   );
 
   // `isLoading`, not `isPending`. React Query leaves a DISABLED query pending
@@ -240,25 +302,37 @@ export default function DecidedTab() {
         <Tab value="rejected" label="Rejected" />
       </Tabs>
 
-      <Stack direction="row" spacing={1.5} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1.5 }}>
-        <Autocomplete
-          size="small"
-          options={employeeOptions}
-          value={employee}
-          onChange={(_e, v) => setEmployee(v)}
-          loading={employeesLoading}
-          disabled={employeesLoading}
-          sx={{ minWidth: 260 }}
-          renderInput={(params) => (
-            <TextField {...withLoadingAdornment(params, employeesLoading)} label="Filter by email" />
-          )}
-        />
+
+      {/* Same Advanced Filter as Needs You and the Expense dashboard; search
+          stays outside it, applied live. */}
+      <Stack
+        direction="row"
+        spacing={1.5}
+        alignItems="center"
+        sx={{ mb: 2, flexWrap: "wrap", rowGap: 1.5 }}
+      >
         <TextField
           size="small"
-          label="Filter by claim ID"
-          value={claimId}
-          onChange={(e) => setClaimId(e.target.value)}
-          sx={{ minWidth: 200 }}
+          label="Search"
+          placeholder="Claim ID, name, email, entity or amount"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ width: 320 }}
+        />
+        <Box sx={{ flexGrow: 1 }} />
+        <ClaimApprovalFilters
+          draft={draft}
+          applied={applied}
+          onDraftChange={setDraft}
+          onApply={() => setApplied(draft)}
+          onClear={() => {
+            setDraft(EMPTY_CLAIM_FILTERS);
+            setApplied(EMPTY_CLAIM_FILTERS);
+          }}
+          employeeOptions={employeeOptions}
+          employeesLoading={employeesLoading}
+          showsKindFilter={showsTypeFilter}
+          entityOptions={entityOptions}
         />
       </Stack>
 
@@ -277,7 +351,9 @@ export default function DecidedTab() {
       ) : expenseRows.length === 0 && opdRows.length === 0 ? (
         !failure && (
           <Typography sx={{ fontSize: 13, color: "text.secondary", py: 3 }}>
-            {employee || claimIdFilter ? "No claims match these filters." : `Nothing ${outcome} yet.`}
+            {hasActiveClaimFilters(applied) || search
+              ? "No claims match these filters."
+              : `Nothing ${outcome} yet.`}
           </Typography>
         )
       ) : (

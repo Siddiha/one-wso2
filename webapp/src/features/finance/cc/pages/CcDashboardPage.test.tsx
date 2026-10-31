@@ -36,7 +36,7 @@ const role = { privileges: ["employee"] as string[] };
 const asked = {
   summary: [] as { dateFrom: string | undefined; ownedCardsOnly: boolean; leadEmail?: string }[],
   compliance: [] as { ownedCardsOnly: boolean; enabled: boolean }[],
-  managerCompliance: [] as { enabled: boolean }[],
+  cardLeadCompliance: [] as { enabled: boolean }[],
   leadSummary: [] as { enabled: boolean }[],
   leadTeam: [] as { leadEmail: string | undefined }[],
 };
@@ -71,14 +71,15 @@ const leadFixtures = {
 };
 
 // The reminder's only side effect. Recorded so a test can prove WHAT went up:
-// the manager and the range, never a message body built on this side.
-const reminderCalls: { managerEmail: string; dateFrom?: string }[] = [];
-const sendReminder = vi.fn(async (args: { managerEmail: string; dateFrom?: string }) => {
+// the lead and the range, never a message body built on this side, and never the
+// card holders to copy — the backend takes those from the backlog it reads.
+const reminderCalls: { leadEmail: string; dateFrom?: string }[] = [];
+const sendReminder = vi.fn(async (args: { leadEmail: string; dateFrom?: string }) => {
   reminderCalls.push(args);
-  return "Reminder sent to Lead Person.";
+  return "Reminder sent to Lead Person, copying the card holders.";
 });
 vi.mock("../useCcMutations", () => ({
-  useCcManagerReminder: () => ({ mutateAsync: sendReminder }),
+  useCcCardLeadReminder: () => ({ mutateAsync: sendReminder }),
 }));
 
 vi.mock("../useCc", () => ({
@@ -154,14 +155,14 @@ vi.mock("../useCc", () => ({
       isError: false,
     };
   },
-  useCcManagerCompliance: (_dateFrom: string | undefined, enabled: boolean) => {
-    asked.managerCompliance.push({ enabled });
+  useCcCardLeadCompliance: (_dateFrom: string | undefined, enabled: boolean) => {
+    asked.cardLeadCompliance.push({ enabled });
     return {
       data: [
         {
-          managerEmail: "lead@wso2.com",
-          managerName: "Lead Person",
-          reportCount: 1,
+          leadEmail: "lead@wso2.com",
+          leadName: "Lead Person",
+          cardHolderCount: 1,
           outstandingAmount: 700,
           transactionCount: 2,
           avgPendingDays: 20,
@@ -169,7 +170,7 @@ vi.mock("../useCc", () => ({
           bucket8To14: 0,
           bucket15To30: 1,
           bucket30Plus: 1,
-          reports: [
+          cardHolders: [
             {
               employeeEmail: "late@wso2.com",
               cardHolderName: "Late Filer",
@@ -208,7 +209,7 @@ beforeEach(() => {
   role.privileges = ["employee"];
   asked.summary.length = 0;
   asked.compliance.length = 0;
-  asked.managerCompliance.length = 0;
+  asked.cardLeadCompliance.length = 0;
   asked.leadSummary.length = 0;
   asked.leadTeam.length = 0;
   notify.showSuccess.mockClear();
@@ -413,54 +414,73 @@ describe("the cardholder table", () => {
   });
 });
 
-// CcDashboardPage.tsx:659-760 — "Group by: Reporting Manager" rolls the backlog
-// up under each manager, and each row can be expanded or copied as a reminder.
-describe("the reporting-manager grouping", () => {
-  const groupByManager = async () => {
+// "Group by: Card Lead" rolls the backlog up under the lead the credit card master
+// data maps each card to, and each row can be expanded or sent a reminder.
+describe("the card-lead grouping", () => {
+  const groupByCardLead = async () => {
     role.privileges = ["employee", "finance"];
     render();
     await userEvent.click(screen.getByRole("combobox", { name: "Group by" }));
-    await userEvent.click(screen.getByRole("option", { name: "Group by: Reporting Manager" }));
+    await userEvent.click(screen.getByRole("option", { name: "Group by: Card Lead" }));
   };
 
-  it("swaps the card-holder rows for one row per reporting manager", async () => {
-    await groupByManager();
+  it("swaps the card-holder rows for one row per card lead", async () => {
+    await groupByCardLead();
     const row = screen.getByText("Lead Person").closest("tr") as HTMLElement;
     expect(row).toHaveTextContent("700");
-    // Their reports stay folded away until the row is expanded.
+    // Their card holders stay folded away until the row is expanded.
     expect(screen.queryByText("Late Filer")).not.toBeInTheDocument();
   });
 
-  it("expands a manager into the individual reports behind them", async () => {
-    await groupByManager();
-    await userEvent.click(screen.getByRole("button", { name: "Expand reports" }));
+  it("expands a lead into the individual card holders behind them", async () => {
+    await groupByCardLead();
+    await userEvent.click(screen.getByRole("button", { name: "Expand card holders" }));
     expect(screen.getByText("Late Filer")).toBeInTheDocument();
   });
 
   // The figures are deliberately NOT sent: the dashboard caches its summary for
   // five minutes, so a body built here could chase a card holder who has since
-  // submitted. The backend reads the backlog itself at send time.
-  it("asks the backend to send, passing only the manager and the range", async () => {
-    await groupByManager();
+  // submitted. The backend reads the backlog itself at send time, and takes the
+  // card holders to copy from it rather than from anything this page passes.
+  it("asks the backend to send, passing only the lead and the range", async () => {
+    await groupByCardLead();
 
     await userEvent.click(screen.getByRole("button", { name: "Email reminder" }));
 
     await waitFor(() => expect(sendReminder).toHaveBeenCalledTimes(1));
-    expect(reminderCalls[0].managerEmail).toBe("lead@wso2.com");
-    expect(Object.keys(reminderCalls[0])).toEqual(["managerEmail", "dateFrom"]);
+    expect(reminderCalls[0].leadEmail).toBe("lead@wso2.com");
+    expect(Object.keys(reminderCalls[0])).toEqual(["leadEmail", "dateFrom"]);
   });
 
   it("confirms the send with the sentence the backend returned", async () => {
-    await groupByManager();
+    await groupByCardLead();
 
     await userEvent.click(screen.getByRole("button", { name: "Email reminder" }));
 
-    await waitFor(() => expect(notify.showSuccess).toHaveBeenCalledWith("Reminder sent to Lead Person."));
+    await waitFor(() =>
+      expect(notify.showSuccess).toHaveBeenCalledWith("Reminder sent to Lead Person, copying the card holders."),
+    );
+  });
+
+  // Finance asked to be able to chase the same lead a second and third time, so
+  // the button has to come back after a send rather than locking the row.
+  it("lets the same lead be reminded again, counting the follow-ups", async () => {
+    await groupByCardLead();
+
+    await userEvent.click(screen.getByRole("button", { name: "Email reminder" }));
+    await waitFor(() => expect(sendReminder).toHaveBeenCalledTimes(1));
+
+    const again = await screen.findByRole("button", { name: "Email another reminder" });
+    expect(again).toBeEnabled();
+    await userEvent.click(again);
+
+    await waitFor(() => expect(sendReminder).toHaveBeenCalledTimes(2));
+    expect(reminderCalls.map((call) => call.leadEmail)).toEqual(["lead@wso2.com", "lead@wso2.com"]);
   });
 
   it("reports a failed send rather than leaving the reader thinking it went", async () => {
     sendReminder.mockRejectedValueOnce(new Error("boom"));
-    await groupByManager();
+    await groupByCardLead();
 
     await userEvent.click(screen.getByRole("button", { name: "Email reminder" }));
 

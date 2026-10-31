@@ -303,7 +303,7 @@ describe("the shared transaction table", () => {
     await screen.findAllByRole("checkbox");
     expect(screen.getByRole("columnheader", { name: "Amount($)" })).toBeInTheDocument();
     // The currency lives in the header, so the CELL carries a bare number. The
-    // detail panel beside it does show "$500.00", exactly as the source's pane
+    // detail panel beside it does show "USD 500.00", exactly as the source's pane
     // does, so this is scoped to the grid rather than to the whole screen.
     const cells = document.querySelectorAll('[data-field="txnAmount"][role="gridcell"]');
     expect(cells.length).toBeGreaterThan(0);

@@ -245,14 +245,19 @@ export interface CcCardHolderCompliance {
 }
 
 /**
- * The same pending backlog as `CcCardHolderCompliance`, rolled up under one
- * reporting manager. An empty `managerEmail` ("Unassigned") holds card holders
- * the HRIS has no manager for.
+ * The same pending backlog as `CcCardHolderCompliance`, rolled up under one card
+ * lead — the approver the credit card master data maps the card to, which is not
+ * necessarily the card holder's reporting manager. An empty `leadEmail`
+ * ("Unassigned") holds cards the master data maps to no lead at all.
+ *
+ * A card can name several leads, and each of them gets their own entry holding
+ * the whole backlog of that card. The entries deliberately overlap, so these
+ * amounts are not meant to be summed into an org-wide total.
  */
-export interface CcManagerCompliance {
-  managerEmail: string;
-  managerName: string;
-  reportCount: number;
+export interface CcCardLeadCompliance {
+  leadEmail: string;
+  leadName: string;
+  cardHolderCount: number;
   transactionCount: number;
   outstandingAmount: number;
   avgPendingDays: number;
@@ -260,7 +265,7 @@ export interface CcManagerCompliance {
   bucket8To14: number;
   bucket15To30: number;
   bucket30Plus: number;
-  reports: CcCardHolderCompliance[];
+  cardHolders: CcCardHolderCompliance[];
 }
 
 

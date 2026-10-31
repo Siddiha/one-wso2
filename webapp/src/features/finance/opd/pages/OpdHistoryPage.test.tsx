@@ -416,7 +416,7 @@ describe("this year's allowance", () => {
 
   it("shows what is left, which is the figure the decision turns on", async () => {
     show();
-    expect(await screen.findByText("Rs. 53,700.00")).toBeInTheDocument();
+    expect(await screen.findByText("LKR 53,700.00")).toBeInTheDocument();
   });
 
   // A strip of dashes above the claims would read as something broken, and

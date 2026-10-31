@@ -537,14 +537,15 @@ export const ccServiceUrls = {
   transactionSummary: `${ccBackendUrl}/transactions/new-transaction-summary`,
   submittedByCategory: `${ccBackendUrl}/transactions/submitted-transaction-summary`,
   cardHolderCompliance: `${ccBackendUrl}/transactions/card-holder-compliance-summary`,
-  // Admin view's "Group by: Reporting Manager" — the same backlog rolled up
-  // under each report's manager. Finance only, enforced server-side.
-  managerCompliance: `${ccBackendUrl}/transactions/manager-compliance-summary`,
-  // POST — emails one reporting manager their team's unsubmitted backlog, copying
-  // the caller. Takes only the manager and the date range: the backend reads the
-  // figures itself at send time, so a reminder never carries what this page last
-  // fetched. Finance only, enforced server-side.
-  managerReminder: `${ccBackendUrl}/transactions/manager-reminder`,
+  // Admin view's "Group by: Card Lead" — the same backlog rolled up under the lead
+  // each card is mapped to in the credit card master data, not under the card
+  // holder's HRIS manager. Finance only, enforced server-side.
+  cardLeadCompliance: `${ccBackendUrl}/transactions/card-lead-compliance-summary`,
+  // POST — emails one card lead the unsubmitted backlog of the card holders they
+  // approve for, copying those card holders and the caller. Takes only the lead and
+  // the date range: the backend reads the figures itself at send time, so a reminder
+  // never carries what this page last fetched. Finance only, enforced server-side.
+  cardLeadReminder: `${ccBackendUrl}/transactions/card-lead-reminder`,
   // Lead view: every lead's approval backlog, and one lead's team within it.
   leadApprovalSummary: `${ccBackendUrl}/transactions/lead-approval-summary`,
   leadTeamCardHolders: `${ccBackendUrl}/transactions/lead-team-card-holder-summary`,

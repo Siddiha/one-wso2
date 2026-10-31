@@ -137,7 +137,7 @@ describe("claiming against last year's balance", () => {
     withLastYear();
     show();
     await screen.findByRole("tab", { name: "Last Year" });
-    expect(screen.getByText("Rs. 45,000.00")).toBeInTheDocument();
+    expect(screen.getByText("LKR 45,000.00")).toBeInTheDocument();
   });
 
   it("swaps to last year's limit on Last Year", async () => {
@@ -145,8 +145,8 @@ describe("claiming against last year's balance", () => {
     show();
     fireEvent.click(await screen.findByRole("tab", { name: "Last Year" }));
     // The whole balance row follows the tab, not just a caption.
-    expect(await screen.findByText("Rs. 9,000.00")).toBeInTheDocument();
-    expect(screen.queryByText("Rs. 45,000.00")).not.toBeInTheDocument();
+    expect(await screen.findByText("LKR 9,000.00")).toBeInTheDocument();
+    expect(screen.queryByText("LKR 45,000.00")).not.toBeInTheDocument();
   });
 
   it("moves the bill-date bounds onto the chosen year", async () => {
@@ -376,7 +376,7 @@ describe("correcting a bill", () => {
     // The claim total follows the edit rather than double-counting it.
     // Shows twice — the bill's own card and the "This claim" stat — so this
     // just confirms both agree, rather than picking one.
-    expect(screen.getAllByText("Rs. 250.00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("LKR 250.00").length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -414,7 +414,7 @@ describe("bills from further back than last year", () => {
     fireEvent.change(screen.getByPlaceholderText("0.00"), { target: { value: "400" } });
     fireEvent.click(screen.getByRole("button", { name: "Save bill" }));
     await waitFor(() =>
-      expect(screen.getAllByText("Rs. 400.00").length).toBeGreaterThanOrEqual(2),
+      expect(screen.getAllByText("LKR 400.00").length).toBeGreaterThanOrEqual(2),
     );
   });
 
@@ -425,8 +425,8 @@ describe("bills from further back than last year", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Restore Draft" }));
     await screen.findByText("Old bill");
     // Neither this year's 45,000 nor last year's 9,000 applies to that year.
-    expect(screen.queryByText("Rs. 45,000.00")).not.toBeInTheDocument();
-    expect(screen.queryByText("Rs. 9,000.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("LKR 45,000.00")).not.toBeInTheDocument();
+    expect(screen.queryByText("LKR 9,000.00")).not.toBeInTheDocument();
     expect(screen.getByText(new RegExp(`These bills are from ${OLD_YEAR}`))).toBeInTheDocument();
   });
 

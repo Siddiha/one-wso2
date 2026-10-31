@@ -16,10 +16,9 @@
  * under the License.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
   Skeleton,
@@ -34,16 +33,26 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
-import { withLoadingAdornment } from "@components/picker-loading/pickerLoading";
 import { describeError } from "../util/financeError";
 import { money } from "../util/financeFormat";
 import { useExpenseAppData, useExpenseClaims, useExpenseEmployees } from "../expense/useExpense";
 import { useOpdClaims, useOpdEmployees, useOpdUserInfo } from "../opd/useOpd";
+import { useExpenseSubsidiaries } from "../expense/dashboard/useExpenseDashboard";
 import { opdStatusFilter, opdHasRole, OPD_ROLE } from "../opd/opdTypes";
 import type { ApproverView, ExpenseClaim } from "../expense/expenseTypes";
 import type { OpdClaim } from "../opd/opdTypes";
 import { ExpenseApprovalReview } from "../expense/approvals/ExpenseApprovalReview";
 import { makeNameResolver } from "../expense/approvals/expenseApprovalTypes";
+import {
+  buildEntityOptions,
+  EMPTY_CLAIM_FILTERS,
+  hasActiveClaimFilters,
+  matchesClaimSearch,
+  showsKind,
+  type ClaimApprovalDraftFilters,
+  type ClaimKind,
+} from "./claimSearch";
+import { ClaimApprovalFilters } from "./ClaimApprovalFilters";
 import { OpdApprovalReview } from "../opd/approvals/OpdApprovalReview";
 import { byLongestWait, daysWaiting, waitingLabel, waitingSince } from "./claimWaiting";
 import { ClaimGroupHeading, useCollapsedGroups } from "./ClaimGroupHeading";
@@ -122,13 +131,34 @@ export default function NeedsYouTab() {
   );
   const employeesLoading = employees.isLoading || opdEmployees.isLoading;
 
+  // Claimant -> legal entity. The HRIS calls it `company` and returns a
+  // subsidiary CODE; the master data turns that into the legal name Finance
+  // reads. Built from the expense directory alone: it is the one that carries
+  // `company`, and an OPD-only claimant simply has no entity to filter on.
+  const subsidiaries = useExpenseSubsidiaries();
+  const entityByEmail = useMemo(
+    () => new Map((employees.data ?? []).map((e) => [e.workEmail, e.company ?? ""])),
+    [employees.data],
+  );
+  const entityOptions = useMemo(
+    () => buildEntityOptions(entityByEmail.values(), subsidiaries.data),
+    [entityByEmail, subsidiaries.data],
+  );
+
   // FilterHolder.tsx-style narrowing: a claim of a known employee or id,
   // without which the only way to find one is to scroll the whole company's.
-  const [employee, setEmployee] = useState<string | null>(null);
-  const [claimId, setClaimId] = useState("");
+  // Two copies: what the panel is editing, and what the queues are actually
+  // reading. `employee` and `claimId` are query parameters, so applying on
+  // every keystroke would start a request per character.
+  const [draft, setDraft] = useState<ClaimApprovalDraftFilters>(EMPTY_CLAIM_FILTERS);
+  const [applied, setApplied] = useState<ClaimApprovalDraftFilters>(EMPTY_CLAIM_FILTERS);
+  const { employee, kind } = applied;
+  // Outside the panel and applied live: it narrows rows already on screen, so
+  // putting it behind Apply would make it slower than the list it cuts down.
+  const [search, setSearch] = useState("");
   // Debounced before it reaches the queries: they key on the whole payload, so
   // the raw value would fire a search per keystroke.
-  const claimIdFilter = useDebouncedValue(claimId.trim());
+  const claimIdFilter = useDebouncedValue(applied.claimId.trim());
   const ids = claimIdFilter ? [claimIdFilter] : undefined;
 
   // Two independent flags, so a person can be waiting on both stages at once.
@@ -153,21 +183,61 @@ export default function NeedsYouTab() {
   const [opdTarget, setOpdTarget] = useState<OpdClaim | null>(null);
   const { isCollapsed, toggleGroup } = useCollapsedGroups();
 
+  // Only one claim type can appear on the lead stage, and someone without the
+  // OPD role never sees OPD at all — so the type toggle is hidden in both
+  // cases. A hidden control must stop narrowing, or a reader who picked "OPD
+  // claims" and then switched to As lead would face an empty queue with no
+  // visible filter to clear.
+  // An unset filter matches everything. A claimant the directory has no entry
+  // for is NOT dropped when no entity is chosen, but cannot match a specific
+  // one — there is nothing to match them on.
+  // The entity LABEL for a claimant, so the search box matches the same words
+  // the Entity dropdown shows ("WSO2 Lanka (Pvt) Ltd"), not the HRIS code.
+  const entityFor = useCallback(
+    (email: string) => {
+      const code = entityByEmail.get(email);
+      if (!code) return "";
+      const option = entityOptions.find((o) => o.code === code);
+      // Both, so the code still matches for anyone typing "WSO2 - SRI LANKA".
+      return option ? `${option.label} ${code}` : code;
+    },
+    [entityByEmail, entityOptions],
+  );
+
+  const entityCode = applied.entityCode;
+  const matchesEntity = useCallback(
+    (email: string) => entityCode === "" || entityByEmail.get(email) === entityCode,
+    [entityCode, entityByEmail],
+  );
+
+  const showsTypeFilter = canOpd && !viewingAsLead;
+  const effectiveKind: ClaimKind = showsTypeFilter ? kind : "all";
+
   const expenseRows = useMemo(
     () =>
-      byLongestWait(
-        expenseStage === "LEAD" ? (leadQueue.data ?? []) : (financeQueue.data ?? []),
-        waitingSince,
-      ),
-    [expenseStage, leadQueue.data, financeQueue.data],
+      showsKind(effectiveKind, "expense")
+        ? byLongestWait(
+            (expenseStage === "LEAD" ? (leadQueue.data ?? []) : (financeQueue.data ?? [])).filter(
+              (claim) => matchesClaimSearch(claim, search, nameFor, entityFor) && matchesEntity(claim.employeeEmail),
+            ),
+            waitingSince,
+          )
+        : [],
+    [expenseStage, leadQueue.data, financeQueue.data, effectiveKind, search, nameFor, entityFor, matchesEntity],
   );
   // Emptied rather than hidden at the render site, so the count behind
   // "Nothing is waiting on you" below follows from the same decision — a lead
   // with only OPD pending is waiting on nothing AS LEAD, and a total still
   // carrying those rows would claim otherwise while showing no list.
   const opdRows = useMemo(
-    () => (viewingAsLead ? [] : byLongestWait(opdQueue.data ?? [], waitingSince)),
-    [viewingAsLead, opdQueue.data],
+    () =>
+      viewingAsLead || !showsKind(effectiveKind, "opd")
+        ? []
+        : byLongestWait(
+            (opdQueue.data ?? []).filter((claim) => matchesClaimSearch(claim, search, nameFor, entityFor) && matchesEntity(claim.employeeEmail)),
+            waitingSince,
+          ),
+    [viewingAsLead, opdQueue.data, effectiveKind, search, nameFor, entityFor, matchesEntity],
   );
 
   // `isLoading`, not `isPending`. React Query leaves a DISABLED query pending
@@ -276,27 +346,41 @@ export default function NeedsYouTab() {
         </ToggleButtonGroup>
       )}
 
-      <Stack direction="row" spacing={1.5} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1.5 }}>
-        <Autocomplete
-          size="small"
-          options={employeeOptions}
-          value={employee}
-          onChange={(_e, v) => setEmployee(v)}
-          loading={employeesLoading}
-          disabled={employeesLoading}
-          sx={{ minWidth: 260 }}
-          renderInput={(params) => (
-            <TextField {...withLoadingAdornment(params, employeesLoading)} label="Filter by email" />
-          )}
-        />
+      {/* The Expense dashboard's Advanced Filter, same shape: one button, a
+          popover, a draft that only lands on Apply. Search sits beside it
+          rather than inside, because it is instant and would be spoiled by a
+          click. */}
+      <Stack
+        direction="row"
+        spacing={1.5}
+        alignItems="center"
+        sx={{ mb: 2, flexWrap: "wrap", rowGap: 1.5 }}
+      >
         <TextField
           size="small"
-          label="Filter by claim ID"
-          value={claimId}
-          onChange={(e) => setClaimId(e.target.value)}
-          sx={{ minWidth: 200 }}
+          label="Search"
+          placeholder="Claim ID, name, email, entity or amount"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ width: 320 }}
+        />
+        <Box sx={{ flexGrow: 1 }} />
+        <ClaimApprovalFilters
+          draft={draft}
+          applied={applied}
+          onDraftChange={setDraft}
+          onApply={() => setApplied(draft)}
+          onClear={() => {
+            setDraft(EMPTY_CLAIM_FILTERS);
+            setApplied(EMPTY_CLAIM_FILTERS);
+          }}
+          employeeOptions={employeeOptions}
+          employeesLoading={employeesLoading}
+          showsKindFilter={showsTypeFilter}
+          entityOptions={entityOptions}
         />
       </Stack>
+
 
       {/* A Skeleton here, unlike `identityLoading` above: that one guards the
           WHOLE tab, flipping between "tabs" and "nothing" as identity
@@ -309,7 +393,9 @@ export default function NeedsYouTab() {
         <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 1.5 }} />
       ) : total === 0 && failures.length === 0 ? (
         <Typography sx={{ fontSize: 13, color: "text.secondary", py: 3 }}>
-          {employee || claimIdFilter ? "No claims match these filters." : "Nothing is waiting on you."}
+          {hasActiveClaimFilters(applied) || search
+            ? "No claims match these filters."
+            : "Nothing is waiting on you."}
         </Typography>
       ) : (
         <Box sx={{ overflowX: "auto" }}>

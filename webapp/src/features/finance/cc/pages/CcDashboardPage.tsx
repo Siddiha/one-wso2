@@ -46,7 +46,7 @@ import { describeError } from "../../util/financeError";
 import { wholeAmount } from "../../util/financeFormat";
 import {
   useCcCardHolderCompliance,
-  useCcManagerCompliance,
+  useCcCardLeadCompliance,
   useCcSubmittedByCategory,
   useCcTransactionSummary,
   useCcUserInfo,
@@ -55,7 +55,7 @@ import {
   ccHasAccess,
   type CcAgeBucketAmount,
   type CcCardHolderCompliance,
-  type CcManagerCompliance,
+  type CcCardLeadCompliance,
 } from "../ccTypes";
 import {
   CC_BREAKDOWN_MONTHS,
@@ -73,7 +73,7 @@ import {
 import { FINANCE_EYEBROW } from "@constants/financeApps";
 import { CcLeadOverviewTable, CcLeadTeamTable, CcLeadTeamUnsubmittedTable } from "../CcLeadViewTables";
 import { useCcLeadApprovalSummary, useCcLeadTeamCardHolders, useCcLeadTeamUnsubmittedSummary } from "../useCc";
-import { useCcManagerReminder } from "../useCcMutations";
+import { useCcCardLeadReminder } from "../useCcMutations";
 import type { CcLeadApprovalSummary } from "../ccTypes";
 import { ccPaths } from "../ccPaths";
 
@@ -117,8 +117,8 @@ function DashboardBody() {
   const [period, setPeriod] = useState<CcSummaryPeriod>("allTime");
   const [granularity, setGranularity] = useState<CcGranularity>("monthly");
   // Admin view's "Group by" toggle on the compliance table — cardHolderCompliance
-  // and manager-compliance-summary are the same backlog, rolled up two ways.
-  const [complianceGroupBy, setComplianceGroupBy] = useState<"cardHolder" | "manager">("cardHolder");
+  // and card-lead-compliance-summary are the same backlog, rolled up two ways.
+  const [complianceGroupBy, setComplianceGroupBy] = useState<"cardHolder" | "cardLead">("cardHolder");
   // index.tsx:79-83 — the view you land on follows the role you hold: finance
   // opens on the company-wide picture, a lead on their own queue, everyone else
   // on their own cards.
@@ -159,9 +159,9 @@ function DashboardBody() {
     ownedCardsOnly,
     showCompliance,
   );
-  const managerCompliance = useCcManagerCompliance(
+  const cardLeadCompliance = useCcCardLeadCompliance(
     dateFrom,
-    showCompliance && complianceGroupBy === "manager",
+    showCompliance && complianceGroupBy === "cardLead",
   );
 
   const breakdown = useMemo(
@@ -415,7 +415,7 @@ function DashboardBody() {
       {showCompliance && (
         <ComplianceTable
           query={compliance}
-          managerQuery={managerCompliance}
+          cardLeadQuery={cardLeadCompliance}
           groupBy={complianceGroupBy}
           onGroupByChange={setComplianceGroupBy}
           dateFrom={dateFrom}
@@ -648,7 +648,7 @@ export function PendingByAge({
 
 function ComplianceTable({
   query,
-  managerQuery,
+  cardLeadQuery,
   groupBy,
   onGroupByChange,
   dateFrom,
@@ -659,14 +659,14 @@ function ComplianceTable({
     isError: boolean;
     error?: unknown;
   };
-  managerQuery: {
-    data?: CcManagerCompliance[];
+  cardLeadQuery: {
+    data?: CcCardLeadCompliance[];
     isLoading: boolean;
     isError: boolean;
     error?: unknown;
   };
-  groupBy: "cardHolder" | "manager";
-  onGroupByChange: (groupBy: "cardHolder" | "manager") => void;
+  groupBy: "cardHolder" | "cardLead";
+  onGroupByChange: (groupBy: "cardHolder" | "cardLead") => void;
   /** The range the table was built from, so a reminder counts the same rows. */
   dateFrom?: string;
 }) {
@@ -695,16 +695,16 @@ function ComplianceTable({
           size="small"
           value={groupBy}
           inputProps={{ "aria-label": "Group by" }}
-          onChange={(e) => onGroupByChange(e.target.value as "cardHolder" | "manager")}
+          onChange={(e) => onGroupByChange(e.target.value as "cardHolder" | "cardLead")}
           sx={{ minWidth: 220 }}
         >
           <MenuItem value="cardHolder">Group by: Card Holder</MenuItem>
-          <MenuItem value="manager">Group by: Reporting Manager</MenuItem>
+          <MenuItem value="cardLead">Group by: Card Lead</MenuItem>
         </Select>
       </Stack>
 
-      {groupBy === "manager" ? (
-        <ManagerComplianceTable query={managerQuery} dateFrom={dateFrom} />
+      {groupBy === "cardLead" ? (
+        <CardLeadComplianceTable query={cardLeadQuery} dateFrom={dateFrom} />
       ) : query.isLoading ? (
         <Note>Loading card holder compliance summary...</Note>
       ) : query.isError ? (
@@ -777,17 +777,20 @@ function ComplianceTable({
 }
 
 /**
- * "Group by: Reporting Manager" — the same backlog as the card-holder table,
- * rolled up under each report's manager, one row per manager that expands to
- * their individual reports. An unassigned manager (HRIS has no manager on
- * record for that card holder) still gets a row, labelled "Unassigned".
+ * "Group by: Card Lead" — the same backlog as the card-holder table, rolled up
+ * under the lead each card is mapped to in the credit card master data, one row
+ * per lead that expands to their individual card holders. A card the master data
+ * maps to no lead still gets a row, labelled "Unassigned".
+ *
+ * A card naming two leads puts its backlog under both of them, so the rows
+ * overlap by design and the column totals are not an org-wide total.
  */
-function ManagerComplianceTable({
+function CardLeadComplianceTable({
   query,
   dateFrom,
 }: {
   query: {
-    data?: CcManagerCompliance[];
+    data?: CcCardLeadCompliance[];
     isLoading: boolean;
     isError: boolean;
     error?: unknown;
@@ -799,28 +802,39 @@ function ManagerComplianceTable({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   const { showSuccess, showError } = useNotifications();
-  const reminder = useCcManagerReminder();
-  // Which manager's reminder is in flight, so that row's button can hold while
-  // it sends. A second press would be a second email the manager cannot unsee.
+  const reminder = useCcCardLeadReminder();
+  // Which lead's reminder is in flight, so that row's button can hold while it
+  // sends and a double-click cannot put the same reminder out twice.
   const [sendingTo, setSendingTo] = useState<string | null>(null);
+  // How many reminders each lead has had from this screen, so a follow-up can say
+  // which one it is. Finance asked to be able to chase a lead a second and third
+  // time, so the button stays live after a send rather than locking the row.
+  //
+  // Held here and nowhere else: nothing is stored against the lead, so this
+  // counts what this page has sent and starts again on a reload. It is a prompt
+  // for whoever is working through the list, not a record of what the lead has
+  // received.
+  const [sentCounts, setSentCounts] = useState<Record<string, number>>({});
 
-  // Same client-side paging as the Card Holder view — a manager list can also
-  // run long, and scrolling through all of it at once was the same complaint.
+  // Same client-side paging as the Card Holder view — a lead list can also run
+  // long, and scrolling through all of it at once was the same complaint.
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(15);
   const maxPage = Math.max(0, Math.ceil(items.length / rowsPerPage) - 1);
   const currentPage = Math.min(page, maxPage);
   const pagedItems = items.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage);
 
-  // Sends from the backend rather than opening a draft here, so the mail
-  // carries the One WSO2 banner the rest of the finance notifications use and
-  // the figures are read at send time instead of coming from this page's
-  // five-minute cache. Only the manager and the range go up — never the body.
-  const emailReminder = async (manager: CcManagerCompliance) => {
-    setSendingTo(manager.managerEmail);
+  // Sends from the backend rather than opening a draft here, so the mail carries
+  // the One WSO2 banner the rest of the finance notifications use and the figures
+  // are read at send time instead of coming from this page's five-minute cache.
+  // Only the lead and the range go up — never the body, and never the card
+  // holders to copy: the backend takes those from the backlog it just read.
+  const emailReminder = async (lead: CcCardLeadCompliance) => {
+    setSendingTo(lead.leadEmail);
     try {
-      const sent = await reminder.mutateAsync({ managerEmail: manager.managerEmail, dateFrom });
-      showSuccess(sent || `Reminder sent to ${manager.managerName || manager.managerEmail}.`);
+      const sent = await reminder.mutateAsync({ leadEmail: lead.leadEmail, dateFrom });
+      setSentCounts((prev) => ({ ...prev, [lead.leadEmail]: (prev[lead.leadEmail] ?? 0) + 1 }));
+      showSuccess(sent || `Reminder sent to ${lead.leadName || lead.leadEmail}.`);
     } catch (error) {
       showError(describeError(error));
     } finally {
@@ -828,16 +842,16 @@ function ManagerComplianceTable({
     }
   };
 
-  if (query.isLoading) return <Note>Loading manager compliance summary...</Note>;
+  if (query.isLoading) return <Note>Loading card lead compliance summary...</Note>;
   if (query.isError) {
     return (
       <Note error>
-        Unable to load the manager compliance summary — try refreshing the page.
+        Unable to load the card lead compliance summary — try refreshing the page.
       </Note>
     );
   }
   if (items.length === 0) {
-    return <Note>No pending transactions for any reporting manager in this range.</Note>;
+    return <Note>No pending transactions for any card lead in this range.</Note>;
   }
 
   return (
@@ -846,8 +860,8 @@ function ManagerComplianceTable({
         <TableHead>
           <TableRow>
             <HeadCell>{""}</HeadCell>
-            <HeadCell>REPORTING MANAGER</HeadCell>
-            <HeadCell align="right">REPORTS</HeadCell>
+            <HeadCell>CARD LEAD</HeadCell>
+            <HeadCell align="right">CARD HOLDERS</HeadCell>
             <HeadCell align="right">UNSUBMITTED ({CURRENCY})</HeadCell>
             <HeadCell align="right">TXNS</HeadCell>
             <HeadCell align="right">AVG DAYS</HeadCell>
@@ -859,62 +873,77 @@ function ManagerComplianceTable({
           </TableRow>
         </TableHead>
         <TableBody>
-          {pagedItems.map((manager) => {
-            const key = manager.managerEmail || "unassigned";
+          {pagedItems.map((lead) => {
+            const key = lead.leadEmail || "unassigned";
             const isOpen = !!expanded[key];
-            const isUnassigned = manager.managerEmail === "";
-            const sending = sendingTo === manager.managerEmail;
+            const isUnassigned = lead.leadEmail === "";
+            const sending = sendingTo === lead.leadEmail;
+            const sentCount = sentCounts[lead.leadEmail] ?? 0;
             return (
               <Fragment key={key}>
                 <TableRow hover>
                   <Cell>
                     <IconButton
                       size="small"
-                      aria-label={isOpen ? "Collapse reports" : "Expand reports"}
+                      aria-label={isOpen ? "Collapse card holders" : "Expand card holders"}
                       onClick={() => toggle(key)}
                     >
                       {isOpen ? <ChevronUpIcon size={14} /> : <ChevronDownIcon size={14} />}
                     </IconButton>
                   </Cell>
-                  <Cell bold>{manager.managerName || "Unassigned"}</Cell>
-                  <Cell align="right">{manager.reportCount}</Cell>
-                  <Cell align="right">{wholeAmount(manager.outstandingAmount)}</Cell>
-                  <Cell align="right">{manager.transactionCount}</Cell>
-                  <Cell align="right">{manager.avgPendingDays.toFixed(1)}</Cell>
-                  <Cell align="right">{manager.bucket0To7}</Cell>
-                  <Cell align="right">{manager.bucket8To14}</Cell>
-                  <Cell align="right" alert={manager.bucket15To30 > 0}>
-                    {manager.bucket15To30}
+                  <Cell bold>{lead.leadName || "Unassigned"}</Cell>
+                  <Cell align="right">{lead.cardHolderCount}</Cell>
+                  <Cell align="right">{wholeAmount(lead.outstandingAmount)}</Cell>
+                  <Cell align="right">{lead.transactionCount}</Cell>
+                  <Cell align="right">{lead.avgPendingDays.toFixed(1)}</Cell>
+                  <Cell align="right">{lead.bucket0To7}</Cell>
+                  <Cell align="right">{lead.bucket8To14}</Cell>
+                  <Cell align="right" alert={lead.bucket15To30 > 0}>
+                    {lead.bucket15To30}
                   </Cell>
-                  <Cell align="right" alert={manager.bucket30Plus > 0}>
-                    {manager.bucket30Plus}
+                  <Cell align="right" alert={lead.bucket30Plus > 0}>
+                    {lead.bucket30Plus}
                   </Cell>
                   <Cell align="right">
-                    <Tooltip
-                      // Narrow enough to wrap rather than run off the last
-                      // column: this sits in the rightmost cell, where an
-                      // unbounded tooltip opens past the edge of the table.
-                      slotProps={{ tooltip: { sx: { maxWidth: 220 } } }}
-                      title={
-                        isUnassigned
-                          ? "No reporting manager to remind"
-                          : sending
-                            ? "Sending the reminder..."
-                            : "Email this manager about unsubmitted transactions"
-                      }
-                    >
-                      <span>
-                        <IconButton
-                          size="small"
-                          aria-label="Email reminder"
-                          disabled={isUnassigned || sending}
-                          onClick={() => void emailReminder(manager)}
-                          sx={{ p: 0.5 }}
-                        >
-                          {sending ? <CircularProgress size={14} /> : <MailIcon size={14} />}
-                        </IconButton>
-                      </span>
-                    </Tooltip>
+                    <Stack direction="row" alignItems="center" justifyContent="flex-end" spacing={0.5}>
+                      <Tooltip
+                        // Narrow enough to wrap rather than run off the last
+                        // column: this sits in the rightmost cell, where an
+                        // unbounded tooltip opens past the edge of the table.
+                        slotProps={{ tooltip: { sx: { maxWidth: 220 } } }}
+                        title={
+                          isUnassigned
+                            ? "This card has no lead in the credit card master data"
+                            : sending
+                              ? "Sending the reminder..."
+                              : sentCount === 0
+                                ? "Email this lead about unsubmitted transactions, copying the card holders"
+                                : `Send another reminder — ${sentCount} sent from this page so far`
+                        }
+                      >
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label={sentCount === 0 ? "Email reminder" : "Email another reminder"}
+                            // Only ever disabled while a send is in flight: Finance
+                            // needs to be able to come back and chase the same lead
+                            // again.
+                            disabled={isUnassigned || sending}
+                            onClick={() => void emailReminder(lead)}
+                            sx={{ p: 0.5 }}
+                          >
+                            {sending ? <CircularProgress size={14} /> : <MailIcon size={14} />}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      {/* How many have gone out from this page, so whoever is working
+                          down the list can see which rows they have already chased. */}
+                      {sentCount > 0 && (
+                        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                          &times;{sentCount}
+                        </Typography>
+                      )}
+                    </Stack>
                   </Cell>
                 </TableRow>
                 <TableRow>
@@ -934,28 +963,30 @@ function ManagerComplianceTable({
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {manager.reports.length === 0 && (
+                          {lead.cardHolders.length === 0 && (
                             <TableRow>
                               <TableCell colSpan={8} sx={{ color: "text.secondary" }}>
-                                No card holders report to this manager.
+                                No card holders are mapped to this lead.
                               </TableCell>
                             </TableRow>
                           )}
-                          {manager.reports.map((report) => (
-                            <TableRow key={report.employeeEmail}>
-                              <Cell>{report.cardHolderName || report.employeeEmail}</Cell>
-                              <Cell align="right">{wholeAmount(report.outstandingAmount)}</Cell>
-                              <Cell align="right">{report.transactionCount}</Cell>
+                          {lead.cardHolders.map((cardHolder) => (
+                            <TableRow key={cardHolder.employeeEmail}>
+                              <Cell>{cardHolder.cardHolderName || cardHolder.employeeEmail}</Cell>
+                              <Cell align="right">{wholeAmount(cardHolder.outstandingAmount)}</Cell>
+                              <Cell align="right">{cardHolder.transactionCount}</Cell>
                               <Cell align="right">
-                                {report.avgDaysToSubmit !== null ? report.avgDaysToSubmit.toFixed(1) : "-"}
+                                {cardHolder.avgDaysToSubmit !== null
+                                  ? cardHolder.avgDaysToSubmit.toFixed(1)
+                                  : "-"}
                               </Cell>
-                              <Cell align="right">{report.bucket0To7}</Cell>
-                              <Cell align="right">{report.bucket8To14}</Cell>
-                              <Cell align="right" alert={report.bucket15To30 > 0}>
-                                {report.bucket15To30}
+                              <Cell align="right">{cardHolder.bucket0To7}</Cell>
+                              <Cell align="right">{cardHolder.bucket8To14}</Cell>
+                              <Cell align="right" alert={cardHolder.bucket15To30 > 0}>
+                                {cardHolder.bucket15To30}
                               </Cell>
-                              <Cell align="right" alert={report.bucket30Plus > 0}>
-                                {report.bucket30Plus}
+                              <Cell align="right" alert={cardHolder.bucket30Plus > 0}>
+                                {cardHolder.bucket30Plus}
                               </Cell>
                             </TableRow>
                           ))}

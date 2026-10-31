@@ -42,6 +42,12 @@ export interface ExpenseEmployee {
   lastName: string | null;
   workEmail: string;
   employeeThumbnail: string | null;
+  /** The HRIS "company" — which reads as a subsidiary CODE ("WSO2 - SRI LANKA"),
+   *  not a legal name. It matches `ExpenseSubsidiarySummary.code`, which is how
+   *  an approval queue resolves a claimant to their legal entity. The backend
+   *  has always sent it (`types.bal` Employee.company); it was simply never
+   *  declared here. Null for an employee the HRIS has no company on. */
+  company: string | null;
 }
 
 export interface ExpenseAppData {

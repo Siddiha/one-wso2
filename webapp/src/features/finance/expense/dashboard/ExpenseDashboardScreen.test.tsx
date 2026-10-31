@@ -206,7 +206,7 @@ describe("a finance approver with everything loaded", () => {
 
     expect(refusal()).not.toBeInTheDocument();
     expect(aStat()).toBeInTheDocument();
-    expect(screen.getByText("$1,000.00")).toBeInTheDocument();
+    expect(screen.getByText("USD 1,000.00")).toBeInTheDocument();
   });
 
   it("requests the reference lists and the report once the role is known", () => {

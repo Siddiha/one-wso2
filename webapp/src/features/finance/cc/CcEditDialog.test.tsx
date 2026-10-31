@@ -229,8 +229,8 @@ describe("a travel job number supplies the units", () => {
     await categoriseAsTravel();
     // 60% and 40% of 1,000.
     // CC transactions are in USD, as the dialog header shows.
-    expect(await screen.findByText("$600.00")).toBeInTheDocument();
-    expect(screen.getByText("$400.00")).toBeInTheDocument();
+    expect(await screen.findByText("USD 600.00")).toBeInTheDocument();
+    expect(screen.getByText("USD 400.00")).toBeInTheDocument();
   });
 });
 

@@ -76,21 +76,24 @@ export function useCcSaveDraft() {
 }
 
 /**
- * POST /transactions/manager-reminder — email one reporting manager the
- * unsubmitted backlog of their direct reports, copying the caller.
+ * POST /transactions/card-lead-reminder — email one card lead the unsubmitted
+ * backlog of the card holders they approve for, copying those card holders and
+ * the caller.
  *
- * Sends only the manager and the date range, never the message. The dashboard
- * holds its summary for five minutes, so a body built here could chase a card
- * holder who has already submitted; the backend reads the figures at send time
- * instead.
+ * Sends only the lead and the date range, never the message. The dashboard holds
+ * its summary for five minutes, so a body built here could chase a card holder
+ * who has already submitted; the backend reads the figures at send time instead.
+ *
+ * Nothing here or on the backend records that a reminder has gone out, so this
+ * can be called again for the same lead as a second or third follow-up.
  */
-export function useCcManagerReminder() {
+export function useCcCardLeadReminder() {
   const getAccessToken = useAccessToken();
-  return useMutation<string, Error, { managerEmail: string; dateFrom?: string }>({
-    mutationFn: async ({ managerEmail, dateFrom }) => {
+  return useMutation<string, Error, { leadEmail: string; dateFrom?: string }>({
+    mutationFn: async ({ leadEmail, dateFrom }) => {
       const accessToken = await getAccessToken();
-      return authedPostText(ccServiceUrls.managerReminder, accessToken, {
-        managerEmail,
+      return authedPostText(ccServiceUrls.cardLeadReminder, accessToken, {
+        leadEmail,
         dateFrom: dateFrom ?? null,
       });
     },

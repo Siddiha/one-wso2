@@ -77,7 +77,24 @@ vi.mock("../expense/useExpense", () => ({
   },
   // Only feeds the review screen's name resolver, which falls back to the
   // bare email with nothing here — nothing under test cares which name shows.
-  useExpenseEmployees: () => ({ data: [], isLoading: false, isError: false }),
+  useExpenseEmployees: () => ({ data: directory, isLoading: false, isError: false }),
+}));
+
+// Subsidiary master data, for the entity dropdown. Mocked so these tests do not
+// start a real query — an extra hook means an extra render, which would double
+// what the recording mocks below see.
+vi.mock("../expense/dashboard/useExpenseDashboard", () => ({
+  useExpenseSubsidiaries: () => ({
+    data: [
+      { id: 1, code: "WSO2 - SRI LANKA", legalName: "WSO2 Lanka (Pvt) Ltd", currencyCode: "LKR", country: "Sri Lanka" },
+      { id: 2, code: "WSO2 - US", legalName: "WSO2 LLC", currencyCode: "USD", country: "United States" },
+      // Two codes, one legal name — the country disambiguates them.
+      { id: 3, code: "WSO2 - UK", legalName: "WSO2 (UK) LIMITED", currencyCode: "GBP", country: "United Kingdom" },
+      { id: 4, code: "WSO2 - SPAIN", legalName: "WSO2 (UK) LIMITED", currencyCode: "EUR", country: "Spain" },
+    ],
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 vi.mock("../opd/useOpd", () => ({
@@ -133,6 +150,13 @@ vi.mock("../opd/approvals/OpdApprovalReview", () => ({
 
 const { default: NeedsYouTab } = await import("./NeedsYouTab");
 
+// Claimants and the entity each belongs to. `company` is the HRIS field, and
+// its values are subsidiary CODES, not legal names.
+const directory = [
+  { workEmail: "kasun@wso2.com", firstName: "Kasun", lastName: "P", employeeThumbnail: null, company: "WSO2 - SRI LANKA" },
+  { workEmail: "dilani@wso2.com", firstName: "Dilani", lastName: "S", employeeThumbnail: null, company: "WSO2 - US" },
+];
+
 const expenseClaim = (over: Record<string, unknown>) => ({
   id: "EXP-1",
   transactions: [],
@@ -173,6 +197,42 @@ beforeEach(() => {
 
 const show = (body: ReactNode = <NeedsYouTab />) =>
   render(<QueryClientProvider client={new QueryClient()}>{body}</QueryClientProvider>);
+
+// The claim id and email filters now live inside the Advanced Filter popover,
+// behind an Apply — so a test that sets one has to open the panel and apply it,
+// exactly as a reader does.
+const applyClaimId = async (value: string) => {
+  await userEvent.click(await screen.findByRole("button", { name: /Advanced Filter/ }));
+  fireEvent.change(await screen.findByLabelText("Filter by Claim ID"), { target: { value } });
+  await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+};
+
+// Claim type is a select in that same panel rather than a row of buttons.
+const applyEntity = async (label: string) => {
+  await userEvent.click(await screen.findByRole("button", { name: /Advanced Filter/ }));
+  await pickInField("Filter by Entity", label);
+  await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+};
+
+// Each narrowing field is an Autocomplete now, typed into or picked from.
+// There is no "All ..." option: clearing the field is what "all" means, so a
+// label starting with "All" clears instead of selecting.
+const pickInField = async (fieldLabel: string, optionLabel: string) => {
+  const input = await screen.findByLabelText(fieldLabel);
+  const field = input.closest(".MuiAutocomplete-root") as HTMLElement;
+  if (optionLabel.startsWith("All ")) {
+    await userEvent.click(within(field).getByTitle("Clear"));
+    return;
+  }
+  await userEvent.click(input);
+  await userEvent.click(await screen.findByRole("option", { name: optionLabel }));
+};
+
+const applyClaimType = async (label: string) => {
+  await userEvent.click(await screen.findByRole("button", { name: /Advanced Filter/ }));
+  await pickInField("Filter by Claim Type", label);
+  await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+};
 
 describe("what it asks each backend for", () => {
   it("asks a lead only for their own reports' claims at the lead stage", () => {
@@ -301,11 +361,172 @@ describe("narrowing by employee or claim id", () => {
 
   it("narrows every queue to one claim id", async () => {
     show();
-    fireEvent.change(await screen.findByLabelText("Filter by claim ID"), {
-      target: { value: "C-42" },
-    });
+    await applyClaimId("C-42");
     await waitFor(() => expect(searches.expense.at(-1)?.ids).toEqual(["C-42"]));
     expect(searches.opd.at(-1)?.ids).toEqual(["C-42"]);
+  });
+});
+
+// Finance's complaint was the length of the combined list: OPD and expense
+// claims on one scroll, with no way to look at one type or to find a known
+// claim without reading every row.
+describe("narrowing the queue", () => {
+  const bothTypes = () => {
+    flags.lead = false;
+    data.opd = [opdClaim({})];
+    data.finance = [
+      expenseClaim({ statusDetails: { status: "PENDING_FINANCE", leadApprovedDate: iso(2026, 7, 25) } }),
+    ];
+  };
+
+  it("shows one claim type at a time, and both again under All", async () => {
+    bothTypes();
+    show();
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+
+    await applyClaimType("Expense Claims");
+    expect(screen.queryByText("OPD-1")).not.toBeInTheDocument();
+    expect(screen.getByText("EXP-1")).toBeInTheDocument();
+
+    await applyClaimType("OPD Claims");
+    expect(screen.getByText("OPD-1")).toBeInTheDocument();
+    expect(screen.queryByText("EXP-1")).not.toBeInTheDocument();
+
+    await applyClaimType("All Claim Types");
+    expect(screen.getByText("OPD-1")).toBeInTheDocument();
+    expect(screen.getByText("EXP-1")).toBeInTheDocument();
+  });
+
+  it("searches across both claim types at once", async () => {
+    bothTypes();
+    show();
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+
+    // A claim id belonging to one type hides the other.
+    await userEvent.type(screen.getByLabelText("Search"), "OPD-1");
+    expect(screen.getByText("OPD-1")).toBeInTheDocument();
+    expect(screen.queryByText("EXP-1")).not.toBeInTheDocument();
+  });
+
+  it("searches by claimant email and by amount, not just id", async () => {
+    bothTypes();
+    show();
+    const box = await screen.findByLabelText("Search");
+
+    await userEvent.type(box, "dilani");
+    expect(screen.getByText("OPD-1")).toBeInTheDocument();
+    expect(screen.queryByText("EXP-1")).not.toBeInTheDocument();
+
+    await userEvent.clear(box);
+    await userEvent.type(box, "8750");
+    expect(screen.getByText("OPD-1")).toBeInTheDocument();
+    expect(screen.queryByText("EXP-1")).not.toBeInTheDocument();
+  });
+
+  // End to end: typing an entity name into the SEARCH box, not the dropdown.
+  it("searches by legal entity from the search box", async () => {
+    bothTypes();
+    show();
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+
+    // Kasun is WSO2 - SRI LANKA, Dilani is WSO2 - US.
+    await userEvent.type(await screen.findByLabelText("Search"), "Lanka");
+    expect(screen.getByText("EXP-1")).toBeInTheDocument();
+    expect(screen.queryByText("OPD-1")).not.toBeInTheDocument();
+  });
+
+  it("says the filters matched nothing rather than that the queue is empty", async () => {
+    bothTypes();
+    show();
+    await userEvent.type(await screen.findByLabelText("Search"), "nothing-matches-this");
+    expect(await screen.findByText("No claims match these filters.")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing is waiting on you.")).not.toBeInTheDocument();
+  });
+
+  // Finance could only approximate this by searching a currency, which cannot
+  // tell two entities sharing one apart (Germany and Spain are both EUR).
+  it("filters the queue down to one legal entity", async () => {
+    bothTypes();
+    show();
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+
+    // Dilani is WSO2 - US, Kasun is WSO2 - SRI LANKA.
+    await applyEntity("WSO2 LLC");
+    expect(screen.getByText("OPD-1")).toBeInTheDocument();
+    expect(screen.queryByText("EXP-1")).not.toBeInTheDocument();
+
+    await applyEntity("WSO2 Lanka (Pvt) Ltd");
+    expect(screen.getByText("EXP-1")).toBeInTheDocument();
+    expect(screen.queryByText("OPD-1")).not.toBeInTheDocument();
+
+    await applyEntity("All Entities");
+    expect(screen.getByText("OPD-1")).toBeInTheDocument();
+    expect(screen.getByText("EXP-1")).toBeInTheDocument();
+  });
+
+  // Finance asked for these to be typeable, not just pickable — the entity list
+  // runs to a dozen options and the claim id / email fields beside them already
+  // take typing, so a pair of click-only dropdowns read as a different control.
+  it("narrows the entity list as you type, and selects what you typed", async () => {
+    bothTypes();
+    show();
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Advanced Filter/ }));
+    await userEvent.type(await screen.findByLabelText("Filter by Entity"), "Lanka");
+
+    // Only the matching entity survives the typing.
+    const options = await screen.findAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent("WSO2 Lanka (Pvt) Ltd");
+
+    await userEvent.click(options[0]);
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(screen.getByText("EXP-1")).toBeInTheDocument();
+    expect(screen.queryByText("OPD-1")).not.toBeInTheDocument();
+  });
+
+  it("lets the claim type be typed too", async () => {
+    bothTypes();
+    show();
+    expect(await screen.findByText("OPD-1")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Advanced Filter/ }));
+    await userEvent.type(await screen.findByLabelText("Filter by Claim Type"), "Expense");
+    const options = await screen.findAllByRole("option");
+    expect(options).toHaveLength(1);
+    await userEvent.click(options[0]);
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(screen.getByText("EXP-1")).toBeInTheDocument();
+    expect(screen.queryByText("OPD-1")).not.toBeInTheDocument();
+  });
+
+  // The toggle would offer a choice that can never show anything: OPD never
+  // appears on the lead stage, and a reader stuck on it could not clear it.
+  it("hides the claim-type filter on the lead stage", async () => {
+    flags.lead = true;
+    flags.finance = true;
+    data.lead = [expenseClaim({ id: "EXP-LEAD" })];
+    data.opd = [opdClaim({})];
+    show();
+    expect(await screen.findByText("EXP-LEAD")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Advanced Filter/ }));
+    expect(screen.queryByLabelText("Filter by Claim Type")).not.toBeInTheDocument();
+    // The filters that DO apply are still offered.
+    expect(screen.getByLabelText("Filter by Claim ID")).toBeInTheDocument();
+  });
+
+  it("hides the claim-type filter from someone with no OPD role", async () => {
+    flags.lead = false;
+    flags.opd = false;
+    data.finance = [
+      expenseClaim({ statusDetails: { status: "PENDING_FINANCE", leadApprovedDate: iso(2026, 7, 25) } }),
+    ];
+    show();
+    expect(await screen.findByText("EXP-1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Advanced Filter/ }));
+    expect(screen.queryByLabelText("Filter by Claim Type")).not.toBeInTheDocument();
   });
 });
 
