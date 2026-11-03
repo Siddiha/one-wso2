@@ -37,6 +37,9 @@ import { CreditCardIcon, PencilIcon } from "@wso2/oxygen-ui-icons-react";
 import { CcBankIcon } from "./CcBankIcon";
 import { ccCardName, type CcCreditCard } from "../ccTypes";
 
+/** Counts past this are shown as `99+`, so the pill stays beside the name. */
+const MAX_COUNT = 99;
+
 /**
  * The credit-card picker — a dropdown with a rename button beside it, as the
  * source has it (`CardMenu.tsx`).
@@ -129,13 +132,9 @@ export function CardMenu({
                       >
                         {ccCardName(card.label, index)}
                       </Typography>
-                      {/* A Chip, not a Badge. A Badge positions its bubble
-                          absolutely against the child it decorates, and this one
-                          had no child to sit on, so the count was laid over the
-                          card name to its left. A Chip takes up room of its own. */}
                       {count > 0 && (
                         <Chip
-                          label={count > 99 ? "99+" : count}
+                          label={count > MAX_COUNT ? `${MAX_COUNT}+` : count}
                           size="small"
                           color="primary"
                           sx={{

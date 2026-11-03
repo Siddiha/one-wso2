@@ -234,10 +234,6 @@ function SubmissionDetails({ txn }: { txn: CcTransaction }) {
         Submission details
       </Button>
       <Collapse in={open} unmountOnExit>
-        {/* Three fixed columns, so each person sits directly above the date
-            they acted on. `auto-fit` sized the track count to whatever fitted,
-            which at this panel's width laid four fields across the first row
-            and pushed the dates under the wrong people. */}
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 1.25, mt: 1 }}>
           {cells.map((c) => (
             <Box key={c.label} sx={{ minWidth: 0 }}>

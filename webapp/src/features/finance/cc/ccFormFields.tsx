@@ -247,10 +247,6 @@ export function CcSubmissionDetails({ txn }: { txn: CcTransaction }) {
           present at zero height — otherwise a screen reader reads out six
           approval fields the sighted reader cannot see. */}
       <Collapse in={open} unmountOnExit>
-        {/* Three fixed columns, so each person sits directly above the date
-            they acted on. `auto-fit` sized the track count to whatever fitted,
-            which at this panel's width laid four fields across the first row
-            and pushed the dates under the wrong people. */}
         <Box
           sx={{
             display: "grid",

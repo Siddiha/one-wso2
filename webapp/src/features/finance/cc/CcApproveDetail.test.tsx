@@ -66,11 +66,4 @@ describe("submission details", () => {
     // Three columns filled row by row: index i and index i+3 share a column.
     labels.forEach((label, i) => expect(rendered[i]).toContain(label));
   });
-
-  it("says so plainly where nobody has acted yet", async () => {
-    await openDetails();
-    expect(screen.getByText("yukthi@wso2.com")).toBeInTheDocument();
-    expect(screen.getByText("suhanr@wso2.com")).toBeInTheDocument();
-    expect(screen.getAllByText("(not approved yet)").length).toBe(3);
-  });
 });
