@@ -18,9 +18,9 @@
 
 import { useState } from "react";
 import {
-  Badge,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -120,16 +120,31 @@ export function CardMenu({
                       gap: 2,
                     }}
                   >
-                    <Stack direction="row" alignItems="center" spacing={1}>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
                       <CcBankIcon bankCode={card.bankCode} />
-                      <Typography component="span" sx={{ fontSize: 13.5, fontWeight: 700 }}>
+                      <Typography
+                        component="span"
+                        noWrap
+                        sx={{ fontSize: 13.5, fontWeight: 700, minWidth: 0 }}
+                      >
                         {ccCardName(card.label, index)}
                       </Typography>
+                      {/* A Chip, not a Badge. A Badge positions its bubble
+                          absolutely against the child it decorates, and this one
+                          had no child to sit on, so the count was laid over the
+                          card name to its left. A Chip takes up room of its own. */}
                       {count > 0 && (
-                        <Badge
-                          badgeContent={count}
+                        <Chip
+                          label={count > 99 ? "99+" : count}
+                          size="small"
                           color="primary"
-                          sx={{ ml: 1, "& .MuiBadge-badge": { fontSize: 10, height: 17, minWidth: 17 } }}
+                          sx={{
+                            flexShrink: 0,
+                            height: 17,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            "& .MuiChip-label": { px: 0.75 },
+                          }}
                         />
                       )}
                       {/* Case-insensitively, the way `useCreditCards` decides
@@ -141,7 +156,10 @@ export function CardMenu({
                         </Typography>
                       )}
                     </Stack>
-                    <Typography component="span" sx={{ fontSize: 12, color: "text.secondary" }}>
+                    <Typography
+                      component="span"
+                      sx={{ fontSize: 12, color: "text.secondary", flexShrink: 0 }}
+                    >
                       {card.ccNumber}
                     </Typography>
                   </Box>

@@ -84,6 +84,31 @@ describe("picking a card", () => {
     expect(within(screen.getByRole("option", { name: /Travel/ })).getByText("3")).toBeInTheDocument();
     expect(within(screen.getByRole("option", { name: /Card 2/ })).queryByText("0")).toBeNull();
   });
+
+  it("gives the count a place of its own rather than laying it over the name", async () => {
+    // A Badge pins its bubble to the child it decorates, and with no child it
+    // pinned it to the name beside it. The count belongs in the flow of the row.
+    const user = userEvent.setup();
+    show();
+    await openMenu(user);
+    const option = screen.getByRole("option", { name: /Travel/ });
+    expect(option.querySelector(".MuiBadge-badge")).toBeNull();
+    expect(option).toHaveTextContent(/Travel\s*3/);
+  });
+
+  it("shortens a count too long to sit beside the name", async () => {
+    const user = userEvent.setup();
+    render(
+      <CardMenu
+        cards={[{ ...cards[0], countNew: 128 }] as unknown as CcCreditCard[]}
+        active="111122223333"
+        onSelect={onSelect}
+        badge="countNew"
+      />,
+    );
+    await openMenu(user);
+    expect(within(screen.getByRole("option", { name: /Travel/ })).getByText("99+")).toBeInTheDocument();
+  });
 });
 
 describe("renaming", () => {
