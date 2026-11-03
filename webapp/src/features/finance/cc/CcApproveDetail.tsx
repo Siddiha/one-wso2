@@ -238,10 +238,7 @@ function SubmissionDetails({ txn }: { txn: CcTransaction }) {
           {cells.map((c) => (
             <Box key={c.label} sx={{ minWidth: 0 }}>
               <Caption>{c.label}</Caption>
-              {/* Wraps rather than truncating: a hover tooltip is the only way
-                  back to an elided address, and touch and keyboard readers have
-                  no hover. Grid rows size to their tallest cell, so a wrapped
-                  address keeps the columns aligned. */}
+              {/* Wraps instead of truncating, so a long email stays readable without hover. */}
               <Typography
                 sx={{
                   fontSize: 12,
