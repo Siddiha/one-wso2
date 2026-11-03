@@ -238,7 +238,17 @@ function SubmissionDetails({ txn }: { txn: CcTransaction }) {
           {cells.map((c) => (
             <Box key={c.label} sx={{ minWidth: 0 }}>
               <Caption>{c.label}</Caption>
-              <Typography sx={{ fontSize: 12, color: c.value ? "text.primary" : "text.disabled" }} noWrap title={c.value ?? undefined}>
+              {/* Wraps rather than truncating: a hover tooltip is the only way
+                  back to an elided address, and touch and keyboard readers have
+                  no hover. Grid rows size to their tallest cell, so a wrapped
+                  address keeps the columns aligned. */}
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  color: c.value ? "text.primary" : "text.disabled",
+                  overflowWrap: "anywhere",
+                }}
+              >
                 {c.value || c.fallback}
               </Typography>
             </Box>

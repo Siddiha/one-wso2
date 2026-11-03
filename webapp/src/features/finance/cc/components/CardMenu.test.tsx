@@ -94,20 +94,41 @@ describe("picking a card", () => {
     const option = screen.getByRole("option", { name: /Travel/ });
     expect(option.querySelector(".MuiBadge-badge")).toBeNull();
     expect(option).toHaveTextContent(/Travel\s*3/);
+
+    // Where it sits, not just that it is somewhere: a sibling of the name that
+    // follows it, rather than a descendant painted on top of it.
+    const name = within(option).getByText("Travel");
+    const count = within(option).getByText("3");
+    expect(name.contains(count)).toBe(false);
+    expect(count.contains(name)).toBe(false);
+    expect(name.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shortens a count too long to sit beside the name", async () => {
+  const showCount = async (countNew: number) => {
     const user = userEvent.setup();
     render(
       <CardMenu
-        cards={[{ ...cards[0], countNew: 128 }] as unknown as CcCreditCard[]}
+        cards={[{ ...cards[0], countNew }] as unknown as CcCreditCard[]}
         active="111122223333"
         onSelect={onSelect}
         badge="countNew"
       />,
     );
     await openMenu(user);
-    expect(within(screen.getByRole("option", { name: /Travel/ })).getByText("99+")).toBeInTheDocument();
+    return within(screen.getByRole("option", { name: /Travel/ }));
+  };
+
+  it("shortens a count too long to sit beside the name", async () => {
+    expect((await showCount(128)).getByText("99+")).toBeInTheDocument();
+  });
+
+  it("shows the largest count that still fits in full", async () => {
+    // The cap is exclusive — 99 is shown as itself, 100 is the first to shorten.
+    expect((await showCount(99)).getByText("99")).toBeInTheDocument();
+  });
+
+  it("shortens the first count past the cap", async () => {
+    expect((await showCount(100)).getByText("99+")).toBeInTheDocument();
   });
 });
 
