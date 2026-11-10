@@ -237,6 +237,14 @@ export interface ExpenseReportEmployeeItem {
   totalValue: number;
 }
 
+/** One option in the Employee filter. The backend builds this list ignoring the
+ *  employee filter itself, so picking someone doesn't collapse the dropdown to
+ *  just them. */
+export interface ExpenseReportEmployeeOption {
+  employeeEmail: string;
+  employeeName: string;
+}
+
 export interface ExpenseClaimsReport {
   reportingCurrency: string;
   current: ExpenseReportTotals;
@@ -252,6 +260,7 @@ export interface ExpenseClaimsReport {
   monthlyBreakdown: ExpenseReportMonthlyItem[];
   employeeBreakdown: ExpenseReportEmployeeItem[];
   availableSalesRegions: string[];
+  availableEmployees: ExpenseReportEmployeeOption[];
 }
 
 /** GET /claims-report query params. `status` is one value per request, not
@@ -262,8 +271,13 @@ export interface ExpenseClaimsReportFilter {
   endDate: string;
   status?: string;
   businessEntity?: string;
-  expenseTypeId?: number;
+  /** Every ID the selected expense type NAME maps to, not one. The catalogue
+   *  holds several rows under one name, each with its own GL code, so sending a
+   *  single ID would report one row's share of the total as if it were all of
+   *  it. Sent as a repeated `expenseTypeIds=` key, like `status` above. */
+  expenseTypeIds?: number[];
   salesRegion?: string;
+  employeeEmail?: string;
 }
 
 export const EXPENSE_DASHBOARD_PERIODS = [

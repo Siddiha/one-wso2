@@ -60,6 +60,7 @@ const report = (over: Partial<ExpenseClaimsReport> = {}): ExpenseClaimsReport =>
     },
   ],
   availableSalesRegions: ["APAC"],
+  availableEmployees: [{ employeeEmail: "ann@wso2.com", employeeName: "Ann Silva" }],
   ...over,
 });
 

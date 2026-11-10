@@ -99,6 +99,7 @@ const emptyReport = {
   monthlyBreakdown: [],
   employeeBreakdown: [],
   availableSalesRegions: [],
+  availableEmployees: [],
 };
 
 const populatedReport = {

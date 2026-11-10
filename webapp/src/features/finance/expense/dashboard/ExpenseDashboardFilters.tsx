@@ -18,7 +18,7 @@ import { useState } from "react";
 import { Box, Button, IconButton, MenuItem, Popover, Stack, TextField, Typography } from "@wso2/oxygen-ui";
 import { FilterIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import { EXPENSE_DASHBOARD_PERIODS, type ExpenseDashboardPeriod } from "../expenseTypes";
-import { ALL_CATEGORIES, ALL_ENTITIES, ALL_REGIONS, ALL_STATUSES } from "./expenseDashboardUtils";
+import { ALL_CATEGORIES, ALL_EMPLOYEES, ALL_ENTITIES, ALL_REGIONS, ALL_STATUSES } from "./expenseDashboardUtils";
 
 export interface ExpenseDashboardDraftFilters {
   /** Part of the draft, not applied on selection: a period picked in the panel
@@ -27,6 +27,9 @@ export interface ExpenseDashboardDraftFilters {
   entity: string;
   region: string;
   category: string;
+  /** The employee's work email, not their name: names repeat across the
+   *  company, emails don't. The panel shows the name. */
+  employee: string;
   status: string;
   /** Only read when the period is Custom; kept here so a half-typed range
    *  never triggers a request before Apply is pressed. */
@@ -80,6 +83,8 @@ export function ExpenseDashboardFilters({
   entityOptions,
   regionOptions,
   categoryOptions,
+  employeeOptions,
+  employeeLabel,
   statusOptions,
   statusLabel,
   onApply,
@@ -93,6 +98,8 @@ export function ExpenseDashboardFilters({
   entityOptions: readonly string[];
   regionOptions: readonly string[];
   categoryOptions: readonly string[];
+  employeeOptions: readonly string[];
+  employeeLabel: (email: string) => string;
   statusOptions: readonly string[];
   statusLabel: (status: string) => string;
   onApply: () => void;
@@ -161,6 +168,13 @@ export function ExpenseDashboardFilters({
             value={draft.category}
             options={[ALL_CATEGORIES, ...categoryOptions]}
             onChange={(v) => set("category", v)}
+          />
+          <FilterSelect
+            label="Filter by Employee"
+            value={draft.employee}
+            options={[ALL_EMPLOYEES, ...employeeOptions]}
+            optionLabel={(option) => (option === ALL_EMPLOYEES ? option : employeeLabel(option))}
+            onChange={(v) => set("employee", v)}
           />
           <FilterSelect
             label="Filter by Status"

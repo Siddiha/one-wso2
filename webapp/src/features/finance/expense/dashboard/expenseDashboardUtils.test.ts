@@ -16,13 +16,28 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ALL_CATEGORIES,
   formatPercentage,
+  getCategoryOptions,
   getEntityCodeForLabel,
   getEntityLabel,
+  getExpenseTypeIdsForCategory,
   getPeriodRange,
   percentageColor,
 } from "./expenseDashboardUtils";
-import type { ExpenseSubsidiarySummary } from "../expenseTypes";
+import type { ExpenseSubsidiarySummary, ExpenseTypeData } from "../expenseTypes";
+
+// The live catalogue really does hold these names several times over, each row
+// under its own GL code, which is what made the filter list one name repeatedly.
+const AIR_TICKET = "Foreign Travel - Air Ticket";
+const TAXI = "Foreign Travel - Taxi/Bus Ticket/Train Ticket (Outside the country of domicile)";
+const CATALOGUE: ExpenseTypeData[] = [
+  { id: 11, type: AIR_TICKET },
+  { id: 12, type: TAXI },
+  { id: 13, type: AIR_TICKET },
+  { id: 14, type: TAXI },
+  { id: 15, type: AIR_TICKET },
+];
 
 const subsidiary = (over: Partial<ExpenseSubsidiarySummary>): ExpenseSubsidiarySummary => ({
   id: 1,
@@ -115,5 +130,36 @@ describe("entity labels", () => {
 
     expect(getEntityCodeForLabel("WSO2 (UK) LIMITED (WSO2-ES)", all)).toBe("WSO2-ES");
     expect(getEntityCodeForLabel("Nothing like this exists", all)).toBeUndefined();
+  });
+});
+
+describe("getCategoryOptions", () => {
+  it("lists a repeated expense type name once", () => {
+    expect(getCategoryOptions(CATALOGUE)).toEqual([AIR_TICKET, TAXI]);
+  });
+
+  it("keeps the order the catalogue first mentions each name in", () => {
+    expect(getCategoryOptions([...CATALOGUE].reverse())).toEqual([AIR_TICKET, TAXI]);
+  });
+
+  it("has nothing to offer for an empty catalogue", () => {
+    expect(getCategoryOptions([])).toEqual([]);
+  });
+});
+
+describe("getExpenseTypeIdsForCategory", () => {
+  it("returns every id filed under the name, not just the first", () => {
+    expect(getExpenseTypeIdsForCategory(AIR_TICKET, CATALOGUE)).toEqual([11, 13, 15]);
+    expect(getExpenseTypeIdsForCategory(TAXI, CATALOGUE)).toEqual([12, 14]);
+  });
+
+  it("filters on nothing for the All sentinel", () => {
+    expect(getExpenseTypeIdsForCategory(ALL_CATEGORIES, CATALOGUE)).toBeUndefined();
+  });
+
+  // An empty array would reach the query builder as "no expenseTypeIds set", which
+  // widens the report to every category while the dropdown still names one.
+  it("returns undefined rather than an empty list for an unknown name", () => {
+    expect(getExpenseTypeIdsForCategory("Nothing like this exists", CATALOGUE)).toBeUndefined();
   });
 });

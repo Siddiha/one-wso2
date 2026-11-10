@@ -92,8 +92,11 @@ function reportQueryString(filter: ExpenseClaimsReportFilter): string {
   if (filter.startDate) params.set("startDate", filter.startDate);
   if (filter.status) params.set("status", filter.status);
   if (filter.businessEntity) params.set("businessEntity", filter.businessEntity);
-  if (filter.expenseTypeId !== undefined) params.set("expenseTypeId", String(filter.expenseTypeId));
+  // `append`, not `set`: one selected expense type name can map to several IDs, and
+  // the backend's `int[]? expenseTypeIds` binds a bare repeated key.
+  for (const id of filter.expenseTypeIds ?? []) params.append("expenseTypeIds", String(id));
   if (filter.salesRegion) params.set("salesRegion", filter.salesRegion);
+  if (filter.employeeEmail) params.set("employeeEmail", filter.employeeEmail);
   return params.toString();
 }
 

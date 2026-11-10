@@ -47,11 +47,14 @@ import { ExpenseEmployeeBreakdownTable } from "./ExpenseEmployeeBreakdownTable";
 import { downloadExpenseReportCsv } from "./exportExpenseReportCsv";
 import {
   ALL_CATEGORIES,
+  ALL_EMPLOYEES,
   ALL_ENTITIES,
   ALL_REGIONS,
   ALL_STATUSES,
+  getCategoryOptions,
   getEntityCodeForLabel,
   getEntityLabel,
+  getExpenseTypeIdsForCategory,
   getPeriodRange,
 } from "./expenseDashboardUtils";
 import { EXPENSE_FILTERABLE_STATUSES } from "../expenseTypes";
@@ -73,6 +76,7 @@ const DEFAULT_FILTERS: ExpenseDashboardDraftFilters = {
   entity: ALL_ENTITIES,
   region: ALL_REGIONS,
   category: ALL_CATEGORIES,
+  employee: ALL_EMPLOYEES,
   status: ALL_STATUSES,
   startDate: DEFAULT_CUSTOM_RANGE.startDate ?? "",
   endDate: DEFAULT_CUSTOM_RANGE.endDate,
@@ -150,11 +154,8 @@ function DashboardBody() {
       applied.entity === ALL_ENTITIES ? undefined : getEntityCodeForLabel(applied.entity, subsidiaries.data ?? []),
     [applied.entity, subsidiaries.data],
   );
-  const expenseTypeId = useMemo(
-    () =>
-      applied.category === ALL_CATEGORIES
-        ? undefined
-        : expenseTypes.data?.find((t) => t.type === applied.category)?.id,
+  const expenseTypeIds = useMemo(
+    () => getExpenseTypeIdsForCategory(applied.category, expenseTypes.data ?? []),
     [applied.category, expenseTypes.data],
   );
   const { startDate, endDate } = getPeriodRange(applied.period, {
@@ -167,9 +168,10 @@ function DashboardBody() {
       startDate,
       endDate,
       businessEntity,
-      expenseTypeId,
+      expenseTypeIds,
       status: applied.status === ALL_STATUSES ? undefined : applied.status,
       salesRegion: applied.region === ALL_REGIONS ? undefined : applied.region,
+      employeeEmail: applied.employee === ALL_EMPLOYEES ? undefined : applied.employee,
     },
     hasFinanceView,
   );
@@ -225,9 +227,22 @@ function DashboardBody() {
   }
 
   const currency = report.data?.reportingCurrency ?? appData.data?.currencyCode ?? "USD";
-  const categoryOptions = (expenseTypes.data ?? []).map((t) => t.type);
+  const categoryOptions = getCategoryOptions(expenseTypes.data ?? []);
   const entityOptions = (subsidiaries.data ?? []).map((s) => getEntityLabel(s, subsidiaries.data ?? []));
   const regionOptions = report.data?.availableSalesRegions ?? [];
+  // Filtered on by email, which is unique, and shown by name, which is not.
+  const availableEmployees = report.data?.availableEmployees ?? [];
+  const employeeNamesByEmail = new Map(availableEmployees.map((e) => [e.employeeEmail, e.employeeName]));
+  // The backend leaves the employee filter out when building this list, so whoever is
+  // selected normally stays in it. Changing another filter can still drop them — pick a
+  // period they filed nothing in — and a selected value absent from the options renders
+  // the field blank. Carrying the drafted email keeps the selection readable, and
+  // labelling it by email says plainly that the report holds nothing for them.
+  const draftedEmployee = draft.employee;
+  const employeeOptions = availableEmployees.map((employee) => employee.employeeEmail);
+  if (draftedEmployee !== ALL_EMPLOYEES && !employeeNamesByEmail.has(draftedEmployee)) {
+    employeeOptions.push(draftedEmployee);
+  }
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -241,6 +256,8 @@ function DashboardBody() {
         entityOptions={entityOptions}
         regionOptions={regionOptions}
         categoryOptions={categoryOptions}
+        employeeOptions={employeeOptions}
+        employeeLabel={(email) => employeeNamesByEmail.get(email) ?? email}
         statusOptions={EXPENSE_FILTERABLE_STATUSES}
         statusLabel={(status) => expenseStatusMeta(status).label}
         onApply={() => setApplied(draft)}
