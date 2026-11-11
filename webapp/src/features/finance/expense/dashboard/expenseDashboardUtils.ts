@@ -19,7 +19,13 @@
 // every other finance screen uses, so the portal has one currency format.
 
 import { toIso } from "../../util/financeFormat";
-import type { ExpenseDashboardPeriod, ExpenseSubsidiarySummary, ExpenseTypeData } from "../expenseTypes";
+import type {
+  ExpenseDashboardPeriod,
+  ExpenseEmployee,
+  ExpenseReportEmployeeOption,
+  ExpenseSubsidiarySummary,
+  ExpenseTypeData,
+} from "../expenseTypes";
 
 export const ALL_ENTITIES = "All entities";
 export const ALL_CATEGORIES = "All categories";
@@ -35,6 +41,38 @@ export const ALL_EMPLOYEES = "All employees";
  */
 export function getCategoryOptions(expenseTypes: readonly ExpenseTypeData[]): string[] {
   return [...new Set(expenseTypes.map((expenseType) => expenseType.type))];
+}
+
+const ACTIVE_EMPLOYEE_STATUS = "Active";
+
+/**
+ * Who the Employee filter offers. The directory is taken as the source rather
+ * than the report, so the whole list is there to choose from before any period
+ * has been applied — deriving it from the report meant the names only appeared
+ * once a period had been applied, and changed underneath whoever was reading it.
+ *
+ * Employees who have left are excluded, since they are most of the directory,
+ * except where the report shows them filing claims in the period being viewed.
+ * Leaving those out would make a name in the Employee table impossible to filter
+ * on.
+ */
+export function getEmployeeOptions(
+  employees: readonly ExpenseEmployee[],
+  withClaims: readonly ExpenseReportEmployeeOption[],
+): { employeeEmail: string; employeeName: string }[] {
+  const named = new Map<string, string>();
+  for (const employee of employees) {
+    if (employee.employeeStatus !== ACTIVE_EMPLOYEE_STATUS) continue;
+    const name = [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim();
+    named.set(employee.workEmail, name.length > 0 ? name : employee.workEmail);
+  }
+  for (const employee of withClaims) {
+    if (!named.has(employee.employeeEmail)) named.set(employee.employeeEmail, employee.employeeName);
+  }
+
+  return [...named]
+    .map(([employeeEmail, employeeName]) => ({ employeeEmail, employeeName }))
+    .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
 }
 
 /**

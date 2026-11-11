@@ -15,7 +15,7 @@
 // under the License.
 
 import { useState } from "react";
-import { Box, Button, IconButton, MenuItem, Popover, Stack, TextField, Typography } from "@wso2/oxygen-ui";
+import { Autocomplete, Box, Button, IconButton, MenuItem, Popover, Stack, TextField, Typography } from "@wso2/oxygen-ui";
 import { FilterIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import { EXPENSE_DASHBOARD_PERIODS, type ExpenseDashboardPeriod } from "../expenseTypes";
 import { ALL_CATEGORIES, ALL_EMPLOYEES, ALL_ENTITIES, ALL_REGIONS, ALL_STATUSES } from "./expenseDashboardUtils";
@@ -71,6 +71,50 @@ function FilterSelect({
         </MenuItem>
       ))}
     </TextField>
+  );
+}
+
+/**
+ * The Employee filter, which is an Autocomplete rather than a plain select: it
+ * offers every active employee, and several hundred names in a dropdown can only
+ * be searched, not scrolled. Matches are capped so that opening it with an empty
+ * box does not mount a row per employee.
+ */
+const EMPLOYEE_OPTIONS_SHOWN = 50;
+
+function EmployeeFilter({
+  value,
+  options,
+  optionLabel,
+  onChange,
+}: {
+  value: string;
+  options: readonly string[];
+  optionLabel: (email: string) => string;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <Autocomplete
+      size="small"
+      disableClearable
+      value={value}
+      options={[ALL_EMPLOYEES, ...options]}
+      getOptionLabel={(option) => (option === ALL_EMPLOYEES ? option : optionLabel(option))}
+      // The sentinel stays visible whatever is typed, so there is always a way
+      // back to the unfiltered report without clearing the box by hand.
+      filterOptions={(all, { inputValue }) => {
+        const needle = inputValue.trim().toLowerCase();
+        const matches = all.filter(
+          (option) =>
+            option === ALL_EMPLOYEES ||
+            optionLabel(option).toLowerCase().includes(needle) ||
+            option.toLowerCase().includes(needle),
+        );
+        return matches.slice(0, EMPLOYEE_OPTIONS_SHOWN);
+      }}
+      onChange={(_, next) => onChange(next ?? ALL_EMPLOYEES)}
+      renderInput={(params) => <TextField {...params} label="Filter by Employee" />}
+    />
   );
 }
 
@@ -169,11 +213,10 @@ export function ExpenseDashboardFilters({
             options={[ALL_CATEGORIES, ...categoryOptions]}
             onChange={(v) => set("category", v)}
           />
-          <FilterSelect
-            label="Filter by Employee"
+          <EmployeeFilter
             value={draft.employee}
-            options={[ALL_EMPLOYEES, ...employeeOptions]}
-            optionLabel={(option) => (option === ALL_EMPLOYEES ? option : employeeLabel(option))}
+            options={employeeOptions}
+            optionLabel={employeeLabel}
             onChange={(v) => set("employee", v)}
           />
           <FilterSelect

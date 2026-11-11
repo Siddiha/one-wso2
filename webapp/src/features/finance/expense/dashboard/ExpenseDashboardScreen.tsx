@@ -35,7 +35,7 @@ import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { FINANCE_EYEBROW } from "@constants/financeApps";
 import FinanceShell from "../../components/FinanceShell";
 import { money } from "../../util/financeFormat";
-import { useExpenseAppData } from "../useExpense";
+import { useExpenseAppData, useExpenseEmployees } from "../useExpense";
 import { useExpenseClaimsReport, useExpenseDashboardTypes, useExpenseSubsidiaries } from "./useExpenseDashboard";
 import { DashboardPanel } from "../../components/DashboardPanel";
 import { expenseStatusMeta } from "../../components/FinanceChips";
@@ -52,6 +52,7 @@ import {
   ALL_REGIONS,
   ALL_STATUSES,
   getCategoryOptions,
+  getEmployeeOptions,
   getEntityCodeForLabel,
   getEntityLabel,
   getExpenseTypeIdsForCategory,
@@ -137,6 +138,7 @@ function DashboardBody() {
   const hasFinanceView = appData.data?.enableFinanceView === true;
   const subsidiaries = useExpenseSubsidiaries(hasFinanceView);
   const expenseTypes = useExpenseDashboardTypes(hasFinanceView);
+  const employees = useExpenseEmployees(hasFinanceView);
 
   // `draft` is what the filter bar shows; `applied` is what the current
   // report was fetched with. Keeping them apart is what lets the bar require
@@ -230,16 +232,15 @@ function DashboardBody() {
   const categoryOptions = getCategoryOptions(expenseTypes.data ?? []);
   const entityOptions = (subsidiaries.data ?? []).map((s) => getEntityLabel(s, subsidiaries.data ?? []));
   const regionOptions = report.data?.availableSalesRegions ?? [];
-  // Filtered on by email, which is unique, and shown by name, which is not.
-  const availableEmployees = report.data?.availableEmployees ?? [];
-  const employeeNamesByEmail = new Map(availableEmployees.map((e) => [e.employeeEmail, e.employeeName]));
-  // The backend leaves the employee filter out when building this list, so whoever is
-  // selected normally stays in it. Changing another filter can still drop them — pick a
-  // period they filed nothing in — and a selected value absent from the options renders
-  // the field blank. Carrying the drafted email keeps the selection readable, and
-  // labelling it by email says plainly that the report holds nothing for them.
+  // Filtered on by email, which is unique, and shown by name, which is not. The list
+  // is the active directory rather than the report's own employees, so every name is
+  // there to pick from before a period has been applied.
+  const selectableEmployees = getEmployeeOptions(employees.data ?? [], report.data?.availableEmployees ?? []);
+  const employeeNamesByEmail = new Map(selectableEmployees.map((e) => [e.employeeEmail, e.employeeName]));
   const draftedEmployee = draft.employee;
-  const employeeOptions = availableEmployees.map((employee) => employee.employeeEmail);
+  const employeeOptions = selectableEmployees.map((employee) => employee.employeeEmail);
+  // A selected value missing from the options renders the field blank, so an employee
+  // the directory no longer offers is carried anyway, labelled by their email.
   if (draftedEmployee !== ALL_EMPLOYEES && !employeeNamesByEmail.has(draftedEmployee)) {
     employeeOptions.push(draftedEmployee);
   }

@@ -42,6 +42,9 @@ export interface ExpenseEmployee {
   lastName: string | null;
   workEmail: string;
   employeeThumbnail: string | null;
+  /** "Active", "Left" or "Marked leaver". Most of the directory has left, so
+   *  the dashboard's employee filter offers the active ones by default. */
+  employeeStatus: string | null;
 }
 
 export interface ExpenseAppData {

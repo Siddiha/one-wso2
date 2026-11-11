@@ -55,18 +55,24 @@ const reportState = { current: queryState({}) };
 vi.mock("@config/apiConfig", () => ({
   isExpenseBackendConfigured: () => configured.value,
 }));
-vi.mock("../useExpense", () => ({
-  useExpenseAppData: () => appDataState.current,
-}));
 // What each dashboard read was asked for: whether it was enabled at all.
 const asked = {
   subsidiaries: [] as boolean[],
   types: [] as boolean[],
+  employees: [] as boolean[],
   report: [] as boolean[],
   // Every filter the report was asked for, so a test can read what the
   // screen requested and not just whether it requested anything.
   reportFilters: [] as { startDate?: string; endDate: string }[],
 };
+
+vi.mock("../useExpense", () => ({
+  useExpenseAppData: () => appDataState.current,
+  useExpenseEmployees: (enabled = true) => {
+    asked.employees.push(enabled);
+    return queryState({ isSuccess: true, data: [] });
+  },
+}));
 
 vi.mock("./useExpenseDashboard", () => ({
   isExpenseBackendConfigured: () => configured.value,
@@ -114,6 +120,7 @@ const populatedReport = {
 beforeEach(() => {
   asked.subsidiaries.length = 0;
   asked.types.length = 0;
+  asked.employees.length = 0;
   asked.report.length = 0;
   asked.reportFilters.length = 0;
   configured.value = true;
@@ -188,6 +195,7 @@ describe("a reader without the finance role", () => {
 
     expect(asked.subsidiaries.every((enabled) => !enabled)).toBe(true);
     expect(asked.types.every((enabled) => !enabled)).toBe(true);
+    expect(asked.employees.every((enabled) => !enabled)).toBe(true);
     expect(asked.report.every((enabled) => !enabled)).toBe(true);
   });
 });
@@ -222,6 +230,7 @@ describe("a finance approver with everything loaded", () => {
 
     expect(asked.subsidiaries.at(-1)).toBe(true);
     expect(asked.types.at(-1)).toBe(true);
+    expect(asked.employees.at(-1)).toBe(true);
     expect(asked.report.at(-1)).toBe(true);
   });
 
