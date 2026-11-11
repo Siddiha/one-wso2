@@ -78,6 +78,13 @@ export interface BankAccountRequestDialogProps {
   employeeWorkLocation: string | undefined;
   /** Banking app-config's `customLocationMap` — narrows Consultancy's Bank Location options. */
   customLocationMap: CustomLocationMapEntry[];
+  /**
+   * Offers every Bank Location on file rather than the ones the employee's own work
+   * location allows. Set when an Admin raises the request for somebody else, since an
+   * employee based in one country can hold a Consultancy account with a bank in another
+   * and only the Admin is in a position to say so.
+   */
+  allowAnyBankLocation?: boolean;
   onClose: () => void;
   /** Called after a successful submission — the caller closes the dialog and refetches. */
   onSuccess: () => void;
@@ -103,6 +110,7 @@ export default function BankAccountRequestDialog({
   allCountries,
   employeeWorkLocation,
   customLocationMap,
+  allowAnyBankLocation = false,
   onClose,
   onSuccess,
 }: BankAccountRequestDialogProps) {
@@ -129,13 +137,20 @@ export default function BankAccountRequestDialog({
   const stepIndex = STEP_ORDER.indexOf(step);
 
   const bankLocations = useMemo(() => {
-    if (isConsultancy) return consultancyLocations;
+    if (isConsultancy && !allowAnyBankLocation) return consultancyLocations;
     const set = new Set((banksQuery.data?.banks ?? []).map((b) => b.bankLocation));
     if (employeeWorkLocation) set.add(employeeWorkLocation);
-    // Backend order, then the employee's own location — not sorted, as in
-    // the source app.
+    // The unrestricted list stays a superset of the restricted one. A mapped
+    // location can be an abbreviation the bank records do not carry — "US"
+    // against their "United States" — and that is the value the form starts
+    // on, so leaving it out would strand an Admin who moved away from it with
+    // no way back.
+    for (const location of consultancyLocations) set.add(location);
+    // Backend order first, then the employee's own location and any mapped
+    // ones that were missing from it. Left unsorted so the banks on file keep
+    // the order the backend returned them in.
     return Array.from(set);
-  }, [isConsultancy, consultancyLocations, banksQuery.data, employeeWorkLocation]);
+  }, [isConsultancy, allowAnyBankLocation, consultancyLocations, banksQuery.data, employeeWorkLocation]);
 
   // The employee's own work location is missing from the Bank Location
   // options — only reachable for Consultancy, when its customLocationMap

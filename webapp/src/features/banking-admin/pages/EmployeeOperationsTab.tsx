@@ -287,6 +287,7 @@ export default function EmployeeOperationsTab() {
           allCountries={config?.allCountries ?? []}
           employeeWorkLocation={selectedEmployee.location}
           customLocationMap={config?.customLocationMap ?? []}
+          allowAnyBankLocation
           onClose={() => setAddAccountType(null)}
           onSuccess={() => {
             setAddAccountType(null);
