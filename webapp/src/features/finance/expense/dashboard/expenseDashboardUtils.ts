@@ -55,6 +55,11 @@ const ACTIVE_EMPLOYEE_STATUS = "Active";
  * except where the report shows them filing claims in the period being viewed.
  * Leaving those out would make a name in the Employee table impossible to filter
  * on.
+ *
+ * A display name is not unique, so a repeated one is qualified with the work
+ * email, the way `getEntityLabel` qualifies a repeated legal name. Without it two
+ * different people offer the same choice and the reader cannot tell which they
+ * are filtering on.
  */
 export function getEmployeeOptions(
   employees: readonly ExpenseEmployee[],
@@ -70,8 +75,15 @@ export function getEmployeeOptions(
     if (!named.has(employee.employeeEmail)) named.set(employee.employeeEmail, employee.employeeName);
   }
 
+  const timesNameUsed = new Map<string, number>();
+  for (const name of named.values()) timesNameUsed.set(name, (timesNameUsed.get(name) ?? 0) + 1);
+
   return [...named]
-    .map(([employeeEmail, employeeName]) => ({ employeeEmail, employeeName }))
+    .map(([employeeEmail, employeeName]) => ({
+      employeeEmail,
+      employeeName:
+        (timesNameUsed.get(employeeName) ?? 0) > 1 ? `${employeeName} (${employeeEmail})` : employeeName,
+    }))
     .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
 }
 
