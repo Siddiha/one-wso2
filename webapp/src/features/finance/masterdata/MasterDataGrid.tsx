@@ -29,6 +29,7 @@ import {
   MASTER_DATA_STATUS,
   type Department,
   type ExpenseType,
+  type InvoiceAccountMapping,
   type MasterDataRow,
   type MasterDataTab,
 } from "./masterDataTypes";
@@ -211,6 +212,43 @@ const MASTER_DATA_COLUMNS: Record<MasterDataTab, DataGrid.GridColDef[]> = {
       renderCell: (p) => <StatusChip value={p.value as string} />,
     },
   ],
+  invoiceAccountMappings: [
+    {
+      field: "accountClassification",
+      headerName: "Account Classification",
+      flex: 3,
+      minWidth: 220,
+      renderCell: (p) => {
+        const r = p.row as InvoiceAccountMapping;
+        return (
+          <InfoCell
+            text={r.accountClassification}
+            details={[
+              ["Internal ID", r.internalId ?? ""],
+              ["Account Number", r.accountNumber ?? ""],
+            ]}
+          />
+        );
+      },
+    },
+    { field: "costType", headerName: "Cost Type", flex: 2, minWidth: 160, ...text() },
+    { field: "engagementCodes", headerName: "Engagement Code", flex: 2.5, minWidth: 180, ...chips() },
+    {
+      field: "engagementCodeSuffixes",
+      headerName: "Engagement Code Suffix",
+      flex: 2.5,
+      minWidth: 180,
+      ...chips(),
+    },
+    { field: "department", headerName: "Department", flex: 1.5, minWidth: 130, ...text() },
+    {
+      field: "status",
+      headerName: "Status",
+      flex: 1,
+      minWidth: 110,
+      renderCell: (p) => <StatusChip value={p.value as string} />,
+    },
+  ],
   creditCards: [
     { field: "ccNumber", headerName: "CC Number", flex: 1.5, minWidth: 130, ...text() },
     { field: "ccProviderCode", headerName: "CC Provider Code", flex: 1.5, minWidth: 150, ...text() },
@@ -287,8 +325,9 @@ function MasterDataToolbar() {
  * One tab's table, with an Actions column of Edit and — on Subsidiaries and
  * Departments — Delete.
  *
- * Credit Cards and Expense Types have no Delete: both carry a status column
- * and retire a record through their form's Active/Inactive toggle instead.
+ * Credit Cards, Expense Types and Invoice Account Mappings have no Delete:
+ * each carries a status column and retires a record through its form's
+ * Active/Inactive toggle instead.
  *
  * Rows auto-size their height (`getRowHeight: () => "auto"`) because an
  * expense type can carry a dozen engagement-code chips and a fixed row
@@ -307,9 +346,10 @@ export default function MasterDataGrid({
   onEdit: (row: MasterDataRow) => void;
   onDelete: (row: MasterDataRow) => void;
 }) {
-  // Both tabs retire a record through their form's Active/Inactive toggle
+  // These tabs retire a record through their form's Active/Inactive toggle
   // instead — see `StatusToggle` in MasterDataFormDialog.
-  const showsDelete = tab !== "creditCards" && tab !== "expenseTypes";
+  const showsDelete =
+    tab !== "creditCards" && tab !== "expenseTypes" && tab !== "invoiceAccountMappings";
 
   const columns: DataGrid.GridColDef[] = [
     ...MASTER_DATA_COLUMNS[tab],

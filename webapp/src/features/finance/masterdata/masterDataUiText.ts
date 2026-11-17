@@ -50,6 +50,8 @@ export const MASTER_DATA_SNACK = {
     autoComplete:
       "Error retrieving auto complete data. Please try again. If the issue persists, contact Internal Apps Team",
     glCodes: "Error retrieving Gl Code data. Please try again. If the issue persists, contact Internal Apps Team",
+    costTypes:
+      "Error retrieving cost types. Please try again. If the issue persists, contact Internal Apps Team",
     employeeEmails:
       "Error retrieving employee emails. Please try again. If the issue persists, contact Internal Apps Team",
   },
@@ -86,6 +88,11 @@ export const MASTER_DATA_FORM_COPY: Record<
     addTitle: "Add New Credit Card",
     editTitle: "Update Existing Credit Card",
   },
+  invoiceAccountMappings: {
+    addButton: "Add New Mapping",
+    addTitle: "Add New Invoice Account Mapping",
+    editTitle: "Update Existing Invoice Account Mapping",
+  },
 };
 
 /** The delete-confirmation dialog's title, body, and the two buttons. */
@@ -107,4 +114,6 @@ export const MASTER_DATA_SUBTITLES: Record<MasterDataTab, string> = {
   departments: "Employee departments, their engagement codes and the GL code each maps to.",
   expenseTypes: "The expense catalogue: category, GL code, and the engagements each type is valid for.",
   creditCards: "The corporate card register: which card belongs to whom, and who approves its spend.",
+  invoiceAccountMappings:
+    "Which NetSuite account and department a travel invoice or per diem bill posts to, by engagement code and cost type.",
 };

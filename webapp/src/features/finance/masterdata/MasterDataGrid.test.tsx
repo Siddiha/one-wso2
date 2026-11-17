@@ -46,6 +46,19 @@ const expenseType = {
   status: "inactive",
 };
 
+const invoiceAccountMapping = {
+  id: 14,
+  internalId: "351",
+  accountNumber: "61033-003",
+  accountClassification: "Travel - Air Ticket",
+  engagementCodes: ["RND-GEN-INT"],
+  engagementCodeSuffixes: ["RND-CON"],
+  invCostTypeId: 1,
+  costType: "Air Ticket",
+  department: "Engineering",
+  status: "active",
+};
+
 const subsidiary = {
   id: 1,
   taxCodeInternalId: 7,
@@ -87,6 +100,25 @@ describe("the master-data table's row actions", () => {
 
     expect(screen.getByLabelText("Edit")).toBeInTheDocument();
     expect(screen.queryByLabelText("Delete")).not.toBeInTheDocument();
+  });
+
+  // Invoice Account Mappings too. Retiring one is `status = 'inactive'`,
+  // which is exactly what stops Travel matching it — a hard delete would
+  // throw away the audit trail on a table that decides where money posts.
+  it("offers no Delete on Invoice Account Mappings", () => {
+    show("invoiceAccountMappings", invoiceAccountMapping as MasterDataRow);
+
+    expect(screen.getByLabelText("Edit")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Delete")).not.toBeInTheDocument();
+  });
+
+  // Cost Type is the column that separates a Travel Invoice mapping from a
+  // Per diem one — they are one table, not two, so without it the rows are
+  // indistinguishable on screen.
+  it("shows the cost type a mapping is filed under", () => {
+    show("invoiceAccountMappings", invoiceAccountMapping as MasterDataRow);
+
+    expect(screen.getByText("Air Ticket")).toBeInTheDocument();
   });
 
   // Subsidiaries and Departments keep theirs — they carry no status column,

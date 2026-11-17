@@ -35,4 +35,5 @@ export const masterDataPaths: Record<MasterDataTab, string> = {
   departments: `${MASTER_DATA_PATH}/departments`,
   expenseTypes: `${MASTER_DATA_PATH}/expense-types`,
   creditCards: `${MASTER_DATA_PATH}/credit-cards`,
+  invoiceAccountMappings: `${MASTER_DATA_PATH}/invoice-account-mappings`,
 };

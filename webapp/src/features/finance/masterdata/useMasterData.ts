@@ -30,6 +30,7 @@ import {
   type ExpenseTypeAutoComplete,
   type ExpenseTypeFilter,
   type GlCode,
+  type InvoiceCostType,
   type MasterDataRowFor,
   type MasterDataTab,
 } from "./masterDataTypes";
@@ -214,6 +215,35 @@ export function useExpenseTypeAutoComplete(enabled = true) {
           await getAccessToken(),
         ),
       ),
+    staleTime: 30 * 60 * 1000,
+    retry: financeRetry,
+  });
+}
+
+/**
+ * The cost types an invoice account mapping may be filed under.
+ *
+ * Eight fixed rows in the Travel app's `inv_cost_type`, one of which —
+ * "Currency (per diem / allowances)" — is what makes a mapping a per diem
+ * mapping rather than a travel invoice one. Sorted by name on arrival so the
+ * picker reads in one order wherever it is shown.
+ */
+export function useInvoiceCostTypes(enabled = true) {
+  const { isSignedIn } = useAsgardeo();
+  const getAccessToken = useAccessToken();
+  const configured = isFinanceMasterDataBackendConfigured();
+
+  return useQuery<InvoiceCostType[]>({
+    queryKey: ["finance-master-data", "invoice-cost-types"],
+    enabled: enabled && isSignedIn && configured,
+    queryFn: async () => {
+      const rows = await authedGet<InvoiceCostType[]>(
+        financeMasterDataServiceUrls.invoiceCostTypes,
+        await getAccessToken(),
+      );
+      return [...(rows ?? [])].sort((a, b) => byName(a.name, b.name));
+    },
+    // A lookup table, not a maintained one: it changes when Travel ships.
     staleTime: 30 * 60 * 1000,
     retry: financeRetry,
   });

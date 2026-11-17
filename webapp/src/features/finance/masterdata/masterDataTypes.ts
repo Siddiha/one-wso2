@@ -17,14 +17,19 @@
 // The finance-master-data wire types, field for field. The backend decides
 // these names — a rename here is a broken request, not a tidy-up.
 
-/** The four collections, in the order the rail lists them. */
-export type MasterDataTab = "subsidiaries" | "departments" | "expenseTypes" | "creditCards";
+/** The five collections, in the order the rail lists them. */
+export type MasterDataTab =
+  | "subsidiaries"
+  | "departments"
+  | "expenseTypes"
+  | "creditCards"
+  | "invoiceAccountMappings";
 
 /**
  * Path segment per tab.
  *
- * The camelCase tab key and the kebab-case endpoint differ for two of the
- * four, so this map is what turns one into the other. Both spellings are load
+ * The camelCase tab key and the kebab-case endpoint differ for three of the
+ * five, so this map is what turns one into the other. Both spellings are load
  * bearing; neither is derivable from the other.
  */
 export const MASTER_DATA_ENDPOINTS: Record<MasterDataTab, string> = {
@@ -32,6 +37,7 @@ export const MASTER_DATA_ENDPOINTS: Record<MasterDataTab, string> = {
   departments: "departments",
   expenseTypes: "expense-types",
   creditCards: "credit-cards",
+  invoiceAccountMappings: "invoice-account-mappings",
 };
 
 /** Page/tab titles. */
@@ -40,6 +46,7 @@ export const MASTER_DATA_LABELS: Record<MasterDataTab, string> = {
   departments: "Departments",
   expenseTypes: "Expense Types",
   creditCards: "Credit Cards",
+  invoiceAccountMappings: "Invoice Account Mappings",
 };
 
 // ---- Subsidiaries ---------------------------------------------------------
@@ -194,14 +201,72 @@ export interface EmployeeEmail {
   workEmail: string;
 }
 
+// ---- Invoice account mappings ---------------------------------------------
+//
+// The one table on these screens that does NOT live in the finance master
+// data database. It belongs to the Travel app, and the master-data backend
+// reaches it through a second MySQL client.
+//
+// A mapping decides which NetSuite account and department a travel invoice or
+// per diem bill is posted to. Travel finds it by engagement code — or, failing
+// that, by a suffix of one — narrowed to a cost type. Per diem is not a
+// separate table: it is cost type "Currency (per diem / allowances)", which is
+// why one screen answers Finance's request for both a Travel Invoice mapping
+// and a Per diem mapping.
+
+export interface InvoiceAccountMapping {
+  id: number;
+  /** NetSuite internal ID of the account. */
+  internalId: string;
+  /** NetSuite account number, e.g. "61033-003". */
+  accountNumber: string;
+  /** Account name exactly as it reads in NetSuite. */
+  accountClassification: string;
+  engagementCodes: string[];
+  engagementCodeSuffixes: string[];
+  invCostTypeId: number;
+  /** Cost type name, resolved by the backend from `invCostTypeId`. */
+  costType: string;
+  department: string | null;
+  status: string;
+}
+
+export interface InvoiceAccountMappingPayload {
+  internalId: string;
+  accountNumber: string;
+  accountClassification: string;
+  engagementCodes: string[];
+  engagementCodeSuffixes: string[];
+  invCostTypeId: number;
+  /**
+   * Blank is a real value, not a missing one — the Intercompany rows carry an
+   * empty department on purpose, so this is never required.
+   */
+  department: string;
+  /** Edits only — see {@link CreditCardPayload.status}, which works the same way. */
+  status?: string;
+}
+
+/** `/invoice-cost-types` rows — the Travel app's `inv_cost_type` lookup. */
+export interface InvoiceCostType {
+  id: number;
+  name: string;
+}
+
 // ---- Unions ---------------------------------------------------------------
 
-export type MasterDataRow = Subsidiary | Department | ExpenseType | CreditCard;
+export type MasterDataRow =
+  | Subsidiary
+  | Department
+  | ExpenseType
+  | CreditCard
+  | InvoiceAccountMapping;
 export type MasterDataPayload =
   | SubsidiaryPayload
   | DepartmentPayload
   | ExpenseTypePayload
-  | CreditCardPayload;
+  | CreditCardPayload
+  | InvoiceAccountMappingPayload;
 
 /**
  * The row type each tab holds, so a page can name its tab once and have the
@@ -212,6 +277,7 @@ export interface MasterDataRowFor {
   departments: Department;
   expenseTypes: ExpenseType;
   creditCards: CreditCard;
+  invoiceAccountMappings: InvoiceAccountMapping;
 }
 
 export interface MasterDataPayloadFor {
@@ -219,4 +285,5 @@ export interface MasterDataPayloadFor {
   departments: DepartmentPayload;
   expenseTypes: ExpenseTypePayload;
   creditCards: CreditCardPayload;
+  invoiceAccountMappings: InvoiceAccountMappingPayload;
 }

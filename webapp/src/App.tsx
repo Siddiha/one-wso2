@@ -218,6 +218,7 @@ import SubsidiariesPage from "@features/finance/masterdata/pages/SubsidiariesPag
 import DepartmentsPage from "@features/finance/masterdata/pages/DepartmentsPage";
 import ExpenseTypesPage from "@features/finance/masterdata/pages/ExpenseTypesPage";
 import CreditCardsPage from "@features/finance/masterdata/pages/CreditCardsPage";
+import InvoiceAccountMappingsPage from "@features/finance/masterdata/pages/InvoiceAccountMappingsPage";
 import ExpenseNewClaimPage from "@features/finance/expense/pages/ExpenseNewClaimPage";
 import MisArrBuildPage from "@features/finance/mis/pages/MisArrBuildPage";
 import MisSession from "@features/finance/mis/components/MisSession";
@@ -509,8 +510,11 @@ export default function App() {
           <Route path="finance/cc/settings" element={<Navigate to={ccPaths.admin} replace />} />
           <Route path="finance/opd/dashboard" element={<OpdDashboardScreen />} />
           <Route path="finance/expense/dashboard" element={<ExpenseDashboardScreen />} />
-          {/* Finance → Master Data: the four reference tables the other
-              finance apps are keyed against, each its own route.
+          {/* Finance → Master Data: the reference tables the other finance
+              apps are keyed against, each its own route. Invoice Account
+              Mappings is the one that does not live in the master-data
+              database — it belongs to the Travel app, reached through a
+              second client in the same backend.
               MasterDataRoute-guarded: this backend has no role scheme of its
               own, so the frontend's admin + preview-flag check is the only
               access control in front of it — it has to hold at the route,
@@ -530,6 +534,10 @@ export default function App() {
           <Route
             path="finance/master-data/credit-cards"
             element={<MasterDataRoute><CreditCardsPage /></MasterDataRoute>}
+          />
+          <Route
+            path="finance/master-data/invoice-account-mappings"
+            element={<MasterDataRoute><InvoiceAccountMappingsPage /></MasterDataRoute>}
           />
           {/* Finance MIS. Nested under /finance/ rather than /finance-mis/,
               because findPerspectiveByPath matches with a bare

@@ -18,7 +18,9 @@ import { describe, expect, it } from "vitest";
 import {
   changedFields,
   initialFormData,
+  invalidEngagementCodes,
   isCreditCardNumberValid,
+  isEngagementCodeValid,
   isFormComplete,
   isUnchanged,
 } from "./masterDataForm";
@@ -27,6 +29,8 @@ import type {
   CreditCardPayload,
   ExpenseType,
   ExpenseTypePayload,
+  InvoiceAccountMapping,
+  InvoiceAccountMappingPayload,
   SubsidiaryPayload,
 } from "./masterDataTypes";
 
@@ -341,5 +345,142 @@ describe("initialFormData — seeding the payload from an existing row, or blank
     };
     const form = initialFormData("creditCards", row) as CreditCardPayload;
     expect(form.comment).toBe("");
+  });
+});
+
+// ---- Invoice account mappings ---------------------------------------------
+//
+// The rules here exist because of two things that have actually gone wrong in
+// production. Codes pasted out of Finance's spreadsheet reached the table
+// carrying CR/LF and had to be scrubbed by hand with a REPLACE() script; and
+// because both code columns store a comma-separated list in one field, a
+// comma inside one entry silently becomes two codes.
+
+/** A complete mapping form, which each test below varies one field of. */
+const MAPPING_FORM: InvoiceAccountMappingPayload = {
+  internalId: "351",
+  accountNumber: "61033-003",
+  accountClassification: "Travel - Air Ticket",
+  engagementCodes: ["RND-GEN-INT"],
+  engagementCodeSuffixes: [],
+  invCostTypeId: 1,
+  department: "Engineering",
+};
+
+describe("isEngagementCodeValid — what one code may contain", () => {
+  it("accepts the shapes the table actually holds", () => {
+    expect(isEngagementCodeValid("RND-GEN-INT")).toBe(true);
+    expect(isEngagementCodeValid("MKT-BU_CORP-GEN")).toBe(true);
+    expect(isEngagementCodeValid("Vok0z-PR")).toBe(true);
+  });
+  it("rejects a comma, which would silently become two codes", () => {
+    expect(isEngagementCodeValid("RND-GEN,BAL-RND")).toBe(false);
+  });
+  it("rejects spaces and line breaks, the contamination seen in production", () => {
+    expect(isEngagementCodeValid("RND GEN")).toBe(false);
+    expect(isEngagementCodeValid("RND-GEN\n")).toBe(false);
+    expect(isEngagementCodeValid("RND-GEN\r")).toBe(false);
+  });
+  it("rejects an empty code", () => {
+    expect(isEngagementCodeValid("")).toBe(false);
+  });
+});
+
+describe("invalidEngagementCodes — which chips are named back", () => {
+  it("reports nothing when both lists are clean", () => {
+    expect(invalidEngagementCodes(MAPPING_FORM)).toEqual([]);
+  });
+  it("reports offenders from the codes and the suffixes alike", () => {
+    const form: InvoiceAccountMappingPayload = {
+      ...MAPPING_FORM,
+      engagementCodes: ["RND-GEN-INT", "BAD CODE"],
+      engagementCodeSuffixes: ["RND-CON", "A,B"],
+    };
+    expect(invalidEngagementCodes(form)).toEqual(["BAD CODE", "A,B"]);
+  });
+});
+
+describe("isFormComplete — invoice account mappings", () => {
+  it("accepts a mapping scoped by engagement codes alone", () => {
+    expect(isFormComplete("invoiceAccountMappings", MAPPING_FORM)).toBe(true);
+  });
+  it("accepts a mapping scoped by suffixes alone", () => {
+    const form: InvoiceAccountMappingPayload = {
+      ...MAPPING_FORM,
+      engagementCodes: [],
+      engagementCodeSuffixes: ["RND-CON"],
+    };
+    expect(isFormComplete("invoiceAccountMappings", form)).toBe(true);
+  });
+  it("refuses a mapping scoped by neither, which Travel could never match", () => {
+    const form: InvoiceAccountMappingPayload = {
+      ...MAPPING_FORM,
+      engagementCodes: [],
+      engagementCodeSuffixes: [],
+    };
+    expect(isFormComplete("invoiceAccountMappings", form)).toBe(false);
+  });
+  it("treats a blank department as filled in — the Intercompany rows carry one", () => {
+    expect(isFormComplete("invoiceAccountMappings", { ...MAPPING_FORM, department: "" })).toBe(true);
+  });
+  it("refuses an otherwise complete form carrying a code the column cannot hold", () => {
+    const form: InvoiceAccountMappingPayload = {
+      ...MAPPING_FORM,
+      engagementCodes: ["RND-GEN,BAL-RND"],
+    };
+    expect(isFormComplete("invoiceAccountMappings", form)).toBe(false);
+  });
+  it("refuses a mapping with no cost type chosen", () => {
+    expect(isFormComplete("invoiceAccountMappings", { ...MAPPING_FORM, invCostTypeId: 0 })).toBe(false);
+  });
+});
+
+describe("initialFormData — invoice account mappings", () => {
+  const row: InvoiceAccountMapping = {
+    id: 14,
+    internalId: "351",
+    accountNumber: "61033-003",
+    accountClassification: "Travel - Air Ticket",
+    engagementCodes: ["RND-GEN-INT", "RND-GEN-IAM"],
+    engagementCodeSuffixes: ["RND-CON"],
+    invCostTypeId: 1,
+    costType: "Air Ticket",
+    department: null,
+    // Rows written before this screen existed carry the capitalised form.
+    status: "Active",
+  };
+
+  it("flattens a row and lower-cases the status it was stored under", () => {
+    expect(initialFormData("invoiceAccountMappings", row)).toEqual({
+      internalId: "351",
+      accountNumber: "61033-003",
+      accountClassification: "Travel - Air Ticket",
+      engagementCodes: ["RND-GEN-INT", "RND-GEN-IAM"],
+      engagementCodeSuffixes: ["RND-CON"],
+      invCostTypeId: 1,
+      // A null department seeds "" so an untouched blank does not read as a change.
+      department: "",
+      status: "active",
+    });
+  });
+
+  it("seeds no status at all when creating", () => {
+    const form = initialFormData("invoiceAccountMappings") as InvoiceAccountMappingPayload;
+    expect(form.status).toBeUndefined();
+    expect(form.invCostTypeId).toBe(0);
+  });
+
+  it("reads as unchanged against the row it was seeded from, despite the casing", () => {
+    const form = initialFormData("invoiceAccountMappings", row);
+    expect(isUnchanged(row, form)).toBe(true);
+    expect(changedFields(row, form)).toEqual({});
+  });
+
+  it("sends only the fields that moved", () => {
+    const form = initialFormData("invoiceAccountMappings", row) as InvoiceAccountMappingPayload;
+    // Same codes, different order — the order they were picked in is not a change.
+    form.engagementCodes = ["RND-GEN-IAM", "RND-GEN-INT"];
+    form.invCostTypeId = 4;
+    expect(changedFields(row, form)).toEqual({ invCostTypeId: 4 });
   });
 });

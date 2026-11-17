@@ -20,12 +20,13 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MasterDataAccessLevel } from "../masterdata/useMasterDataAccess";
 
-/** The four master-data rail ids, which answer as one. */
+/** The master-data rail ids, which answer as one. */
 const MASTER_DATA_IDS = [
   "master-data-subsidiaries",
   "master-data-departments",
   "master-data-expense-types",
   "master-data-credit-cards",
+  "master-data-invoice-account-mappings",
 ] as const;
 
 // Four backends, four vocabularies, none of them the people-app roles the

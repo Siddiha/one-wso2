@@ -29,6 +29,7 @@ import {
   MASTER_DATA_LABELS,
   type ExpenseTypeAutoComplete,
   type GlCode,
+  type InvoiceCostType,
   type MasterDataRow,
   type MasterDataTab,
 } from "./masterDataTypes";
@@ -37,9 +38,9 @@ import {
  * The page every master-data tab is: a title, an "Add New …" button, and a
  * table with Edit and Delete on each row.
  *
- * The four screens differ only in which rows they load and, on expense types,
- * a filter bar above the table — so they share this and pass their own data
- * in, rather than each repeating the shell, the two dialogs and the
+ * The screens differ only in which rows they load and, on expense types, a
+ * filter bar above the table — so they share this and pass their own data in,
+ * rather than each repeating the shell, the two dialogs and the
  * add/edit/delete state machine.
  *
  * Which record a dialog is working on lives here because both dialogs and the
@@ -55,6 +56,7 @@ export default function MasterDataScreen({
   glCodes,
   autoComplete,
   employeeEmails,
+  costTypes,
   toolbar,
   children,
 }: {
@@ -66,6 +68,7 @@ export default function MasterDataScreen({
   glCodes?: GlCode[];
   autoComplete?: ExpenseTypeAutoComplete;
   employeeEmails?: string[];
+  costTypes?: InvoiceCostType[];
   /** Extra controls beside "Add New …" — the expense-type filter toggle. */
   toolbar?: ReactNode;
   /** Rendered between the header and the table — the expense-type filter bar. */
@@ -124,6 +127,7 @@ export default function MasterDataScreen({
           glCodes={glCodes}
           autoComplete={autoComplete}
           employeeEmails={employeeEmails}
+          costTypes={costTypes}
           onClose={() => setFormRow(undefined)}
         />
       )}

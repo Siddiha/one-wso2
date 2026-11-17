@@ -29,7 +29,13 @@ import {
 } from "@wso2/oxygen-ui";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import { MASTER_DATA_FORM_COPY, MASTER_DATA_SNACK } from "./masterDataUiText";
-import { changedFields, initialFormData, isFormComplete, isUnchanged } from "./masterDataForm";
+import {
+  changedFields,
+  initialFormData,
+  invalidEngagementCodes,
+  isFormComplete,
+  isUnchanged,
+} from "./masterDataForm";
 import {
   CreditCardNumberInput,
   IdSelectInput,
@@ -51,6 +57,8 @@ import {
   type ExpenseTypeAutoComplete,
   type ExpenseTypePayload,
   type GlCode,
+  type InvoiceAccountMappingPayload,
+  type InvoiceCostType,
   type MasterDataPayload,
   type MasterDataRow,
   type MasterDataTab,
@@ -58,11 +66,11 @@ import {
 } from "./masterDataTypes";
 
 /**
- * Add / edit, for all four tabs.
+ * Add / edit, for every tab.
  *
- * One dialog rather than four: the submit path, the enable rule and the
- * snackbars are identical across tabs, and only the field list differs. The
- * field list is the `switch` at the bottom.
+ * One dialog rather than one per tab: the submit path, the enable rule and
+ * the snackbars are identical across them, and only the field list differs.
+ * The field list is the `switch` at the bottom.
  *
  * Submit is enabled only when the form is complete AND — when editing —
  * something has actually changed. Pressing it on an unchanged record would
@@ -75,6 +83,7 @@ export default function MasterDataFormDialog({
   glCodes,
   autoComplete,
   employeeEmails,
+  costTypes,
   onClose,
 }: {
   tab: MasterDataTab;
@@ -87,6 +96,8 @@ export default function MasterDataFormDialog({
   autoComplete?: ExpenseTypeAutoComplete;
   /** Credit-card form's employee + lead pickers. */
   employeeEmails?: string[];
+  /** Invoice-account-mapping form's Cost Type dropdown. */
+  costTypes?: InvoiceCostType[];
   onClose: () => void;
 }) {
   const isCreate = !row;
@@ -131,7 +142,6 @@ export default function MasterDataFormDialog({
             showSuccess(MASTER_DATA_SNACK.success.updated);
             onClose();
           },
-          // The patch says which refusal a 409 was: retiring or reactivating.
           onError: (error) => showError(describeUpdateError(error, patch)),
         },
       );
@@ -165,6 +175,7 @@ export default function MasterDataFormDialog({
           glCodes={glCodes}
           autoComplete={autoComplete}
           employeeEmails={employeeEmails}
+          costTypes={costTypes}
           countryCurrency={countries.data ?? {}}
         />
       </DialogContent>
@@ -193,6 +204,7 @@ function Fields({
   glCodes,
   autoComplete,
   employeeEmails,
+  costTypes,
   countryCurrency,
 }: {
   tab: MasterDataTab;
@@ -201,6 +213,7 @@ function Fields({
   glCodes?: GlCode[];
   autoComplete?: ExpenseTypeAutoComplete;
   employeeEmails?: string[];
+  costTypes?: InvoiceCostType[];
   /** ISO 4217 currency code by country. */
   countryCurrency: Readonly<Record<string, string>>;
 }) {
@@ -340,6 +353,86 @@ function Fields({
               onChange={set}
             />
           </Box>
+          <StatusToggle value={f.status} onChange={set} />
+        </>
+      );
+    }
+
+    case "invoiceAccountMappings": {
+      const f = form as InvoiceAccountMappingPayload;
+      const costTypeOptions = (costTypes ?? []).map((c) => ({ id: c.id, label: c.name }));
+      // Flagged here rather than on the chips themselves: a rejected value is
+      // about the pair of lists, and naming the offending codes back is more
+      // use than reddening a field that already looks filled in.
+      const badCodes = invalidEngagementCodes(f);
+      return (
+        <>
+          <IdSelectInput
+            id="invCostTypeId"
+            label="Cost Type"
+            value={f.invCostTypeId}
+            options={costTypeOptions}
+            required
+            onChange={set}
+          />
+          <TextInput
+            id="accountClassification"
+            label="Account Classification"
+            value={f.accountClassification}
+            required
+            onChange={set}
+          />
+          <TextInput
+            id="accountNumber"
+            label="Account Number"
+            value={f.accountNumber}
+            required
+            onChange={set}
+          />
+          <TextInput
+            id="internalId"
+            label="NetSuite Internal ID"
+            value={f.internalId}
+            required
+            onChange={set}
+          />
+          <TextInput
+            id="department"
+            label="Department"
+            value={f.department}
+            required={false}
+            onChange={set}
+          />
+          {/* Boxed together under a warning line for the same reason the
+              expense-type pair is: the rule binding these two fields is not
+              visible from either one on its own. */}
+          <Alert severity="warning" variant="outlined" sx={{ mt: 2, mb: 1 }}>
+            Please fill in at least one of the following fields
+          </Alert>
+          <Box sx={{ pl: 0.5 }}>
+            <MultiSelectInput
+              id="engagementCodes"
+              label="Engagement Codes"
+              values={f.engagementCodes}
+              options={[]}
+              required={false}
+              onChange={set}
+            />
+            <MultiSelectInput
+              id="engagementCodeSuffixes"
+              label="Engagement Code Suffixes"
+              values={f.engagementCodeSuffixes}
+              options={[]}
+              required={false}
+              onChange={set}
+            />
+          </Box>
+          {badCodes.length > 0 && (
+            <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
+              These cannot be saved as typed — remove any spaces, commas or
+              line breaks, and enter one code per entry: {badCodes.join(" · ")}
+            </Alert>
+          )}
           <StatusToggle value={f.status} onChange={set} />
         </>
       );

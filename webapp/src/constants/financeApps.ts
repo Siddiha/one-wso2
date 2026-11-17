@@ -162,11 +162,12 @@ export const FINANCE_MASTER_DATA_APPS: readonly MenuApp[] = [
     key: "finance-master-data",
     name: "Master Data",
     icon: DatabaseIcon,
-    purpose: "Maintain the subsidiaries, departments, expense types and cards the finance apps refer to.",
-    // `requires: ["admin"]` on all four is a RESTRICTION MARKER, not the gate.
+    purpose:
+      "Maintain the subsidiaries, departments, expense types, cards and invoice account mappings the finance apps refer to.",
+    // `requires: ["admin"]` on all of them is a RESTRICTION MARKER, not the gate.
     // For a finance-claimed id the finance adapter is the only decider
     // (visibilityFold's `canSee` returns `owner.canSee(...)` without consulting
-    // `requires` at all), and these four are answered by the master-data
+    // `requires` at all), and these are answered by the master-data
     // backend's own `/user-info` — see useFinanceGate's master-data case. What
     // the marker still buys is the fail-closed backstop: it puts these ids in
     // `RESTRICTED_IDS`, so if one is ever renamed and stops matching its
@@ -178,6 +179,7 @@ export const FINANCE_MASTER_DATA_APPS: readonly MenuApp[] = [
       { id: "master-data-departments", label: "Departments", desc: "Departments, engagement codes and their GL codes.", requires: ["admin"], path: masterDataPaths.departments },
       { id: "master-data-expense-types", label: "Expense Types", desc: "The expense catalogue and the engagements each type is valid for.", requires: ["admin"], path: masterDataPaths.expenseTypes },
       { id: "master-data-credit-cards", label: "Credit Cards", desc: "The corporate card register and who approves each card's spend.", requires: ["admin"], path: masterDataPaths.creditCards },
+      { id: "master-data-invoice-account-mappings", label: "Invoice Account Mappings", desc: "Which NetSuite account a travel invoice or per diem bill posts to.", requires: ["admin"], path: masterDataPaths.invoiceAccountMappings },
     ],
   },
 ];

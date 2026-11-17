@@ -686,8 +686,8 @@ export function isFinanceMasterDataBackendConfigured(): boolean {
 
 export const financeMasterDataServiceUrls = {
   userInfo: `${financeMasterDataBackendUrl}/user-info`,
-  // The four collections, keyed by path segment, so the item helpers below
-  // can serve all four tabs off one shared builder.
+  // The five collections, keyed by path segment, so the item helpers below
+  // can serve every tab off one shared builder.
   collection: (name: string) => `${financeMasterDataBackendUrl}/${name}`,
   item: (name: string, id: number) =>
     `${financeMasterDataBackendUrl}/${name}/${encodeURIComponent(String(id))}`,
@@ -699,6 +699,9 @@ export const financeMasterDataServiceUrls = {
   employeeEmails: `${financeMasterDataBackendUrl}/employees/email`,
   expenseTypeAutocomplete: `${financeMasterDataBackendUrl}/expense-types/autocomplete-values`,
   countries: `${financeMasterDataBackendUrl}/countries`,
+  // The Travel app's cost-type lookup, served through this backend because
+  // the invoice account mappings it keys are read through it too.
+  invoiceCostTypes: `${financeMasterDataBackendUrl}/invoice-cost-types`,
 };
 
 // ---- Updates Manager backend ---------------------------------------------

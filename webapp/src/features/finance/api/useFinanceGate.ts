@@ -99,6 +99,7 @@ const ITEM_BACKENDS: Readonly<Record<string, readonly FinanceGateApp[]>> = {
   "master-data-departments": ["masterData"],
   "master-data-expense-types": ["masterData"],
   "master-data-credit-cards": ["masterData"],
+  "master-data-invoice-account-mappings": ["masterData"],
 };
 
 /**
@@ -280,6 +281,7 @@ export function useFinanceGate(
       case "master-data-departments":
       case "master-data-expense-types":
       case "master-data-credit-cards":
+      case "master-data-invoice-account-mappings":
         return canSeeMasterData(masterData.data);
       default:
         // Per-user views (New / Pending / History) are open; any other item
