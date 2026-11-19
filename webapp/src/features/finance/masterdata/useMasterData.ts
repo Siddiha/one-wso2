@@ -223,10 +223,10 @@ export function useExpenseTypeAutoComplete(enabled = true) {
 /**
  * The cost types an invoice account mapping may be filed under.
  *
- * Eight fixed rows in the Travel app's `inv_cost_type`, one of which —
- * "Currency (per diem / allowances)" — is what makes a mapping a per diem
- * mapping rather than a travel invoice one. Sorted by name on arrival so the
- * picker reads in one order wherever it is shown.
+ * Eight fixed rows, one of which — "Currency (per diem / allowances)" — is
+ * what makes a mapping a per diem mapping rather than a travel invoice one.
+ * Sorted by name on arrival so the picker reads in one order wherever it is
+ * shown.
  */
 export function useInvoiceCostTypes(enabled = true) {
   const { isSignedIn } = useAsgardeo();
@@ -243,7 +243,7 @@ export function useInvoiceCostTypes(enabled = true) {
       );
       return [...(rows ?? [])].sort((a, b) => byName(a.name, b.name));
     },
-    // A lookup table, not a maintained one: it changes when Travel ships.
+    // A lookup table, not one maintained on these screens.
     staleTime: 30 * 60 * 1000,
     retry: financeRetry,
   });

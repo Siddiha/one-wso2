@@ -512,9 +512,9 @@ export default function App() {
           <Route path="finance/expense/dashboard" element={<ExpenseDashboardScreen />} />
           {/* Finance → Master Data: the reference tables the other finance
               apps are keyed against, each its own route. Invoice Account
-              Mappings is the one that does not live in the master-data
-              database — it belongs to the Travel app, reached through a
-              second client in the same backend.
+              Mappings is served by ONE_WSO2_FINANCE_MASTER_DATA_BACKEND_URL
+              like the rest, though its rows are not held in the master-data
+              database itself.
               MasterDataRoute-guarded: this backend has no role scheme of its
               own, so the frontend's admin + preview-flag check is the only
               access control in front of it — it has to hold at the route,

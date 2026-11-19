@@ -429,8 +429,8 @@ function Fields({
           </Box>
           {badCodes.length > 0 && (
             <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
-              These cannot be saved as typed — remove any spaces, commas or
-              line breaks, and enter one code per entry: {badCodes.join(" · ")}
+              These cannot be saved as typed. Use only letters, digits, hyphens, dots
+              or underscores, one code per entry: {badCodes.join(" · ")}
             </Alert>
           )}
           <StatusToggle value={f.status} onChange={set} />

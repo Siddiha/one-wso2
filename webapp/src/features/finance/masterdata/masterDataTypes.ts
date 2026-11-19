@@ -203,12 +203,12 @@ export interface EmployeeEmail {
 
 // ---- Invoice account mappings ---------------------------------------------
 //
-// The one table on these screens that does NOT live in the finance master
-// data database. It belongs to the Travel app, and the master-data backend
-// reaches it through a second MySQL client.
+// Served by ONE_WSO2_FINANCE_MASTER_DATA_BACKEND_URL like the rest of these
+// screens, though these rows are not held in the finance master data database
+// itself.
 //
 // A mapping decides which NetSuite account and department a travel invoice or
-// per diem bill is posted to. Travel finds it by engagement code — or, failing
+// per diem bill is posted to. It is matched by engagement code — or, failing
 // that, by a suffix of one — narrowed to a cost type. Per diem is not a
 // separate table: it is cost type "Currency (per diem / allowances)", which is
 // why one screen answers Finance's request for both a Travel Invoice mapping
@@ -247,7 +247,7 @@ export interface InvoiceAccountMappingPayload {
   status?: string;
 }
 
-/** `/invoice-cost-types` rows — the Travel app's `inv_cost_type` lookup. */
+/** `/invoice-cost-types` rows — the cost types a mapping may be filed under. */
 export interface InvoiceCostType {
   id: number;
   name: string;

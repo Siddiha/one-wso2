@@ -14,8 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useEffect } from "react";
-import { useNotifications } from "@context/notifications/NotificationsContext";
+import { Alert, Button } from "@wso2/oxygen-ui";
 import MasterDataScreen from "../MasterDataScreen";
 import { MASTER_DATA_SNACK } from "../masterDataUiText";
 import { useInvoiceCostTypes, useMasterDataList } from "../useMasterData";
@@ -25,10 +24,9 @@ import { useInvoiceCostTypes, useMasterDataList } from "../useMasterData";
  *
  * These decide which NetSuite account and department a travel invoice or per
  * diem bill is posted to. Until this screen existed they were maintained by
- * emailing Finance's spreadsheet to the Digital team, who ran an INSERT
- * against the Travel production database by hand — so a missing mapping
- * surfaced as a failed NetSuite sync and took a person in another team to
- * fix.
+ * emailing Finance's spreadsheet to the Digital team, who inserted the rows
+ * by hand — so a missing mapping surfaced as a failed NetSuite sync and took
+ * a person in another team to fix.
  *
  * Travel Invoice mappings and Per diem mappings are one table, not two: the
  * cost type is what separates them, and "Currency (per diem / allowances)" is
@@ -42,14 +40,6 @@ import { useInvoiceCostTypes, useMasterDataList } from "../useMasterData";
 export default function InvoiceAccountMappingsPage() {
   const query = useMasterDataList("invoiceAccountMappings");
   const costTypes = useInvoiceCostTypes();
-  const { showError } = useNotifications();
-
-  // The cost types failing is its own message, separate from the rows
-  // failing: it leaves the form's Cost Type picker empty while the table may
-  // still be perfectly fine.
-  useEffect(() => {
-    if (costTypes.isError) showError(MASTER_DATA_SNACK.error.costTypes);
-  }, [costTypes.isError, showError]);
 
   return (
     <MasterDataScreen
@@ -57,8 +47,31 @@ export default function InvoiceAccountMappingsPage() {
       rows={query.data ?? []}
       loading={query.isLoading}
       error={query.isError ? query.error : undefined}
-      onRetry={() => void query.refetch()}
+      onRetry={() => {
+        void query.refetch();
+        void costTypes.refetch();
+      }}
       costTypes={costTypes.data}
-    />
+    >
+      {/* The cost types failing is its own failure, not the table's: the rows
+          can be entirely fine while the form's required Cost Type picker has
+          nothing to offer. Reported on the page rather than in a snackbar so
+          it carries its own retry, and so the rows stay readable — the
+          screen's retry is only shown when the rows failed as well. */}
+      {costTypes.isError && (
+        <Alert
+          severity="error"
+          variant="outlined"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => void costTypes.refetch()}>
+              Retry
+            </Button>
+          }
+        >
+          {MASTER_DATA_SNACK.error.costTypes}
+        </Alert>
+      )}
+    </MasterDataScreen>
   );
 }

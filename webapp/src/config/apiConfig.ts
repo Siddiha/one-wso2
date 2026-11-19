@@ -699,8 +699,7 @@ export const financeMasterDataServiceUrls = {
   employeeEmails: `${financeMasterDataBackendUrl}/employees/email`,
   expenseTypeAutocomplete: `${financeMasterDataBackendUrl}/expense-types/autocomplete-values`,
   countries: `${financeMasterDataBackendUrl}/countries`,
-  // The Travel app's cost-type lookup, served through this backend because
-  // the invoice account mappings it keys are read through it too.
+  // Invoice cost types served by ONE_WSO2_FINANCE_MASTER_DATA_BACKEND_URL.
   invoiceCostTypes: `${financeMasterDataBackendUrl}/invoice-cost-types`,
 };
 
