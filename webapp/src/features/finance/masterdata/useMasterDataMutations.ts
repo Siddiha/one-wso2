@@ -43,6 +43,12 @@ function useInvalidateTab(tab: MasterDataTab) {
       // type that is not offered by its own filter bar is a stale cache, not
       // a missing record.
       qc.invalidateQueries({ queryKey: ["finance-master-data", "expense-type-autocomplete"] }),
+      // Same for the mapping lists, which the backend reads from the whole
+      // table rather than from the page on screen — so a new department or
+      // engagement code is offered by the filters only once this is dropped.
+      qc.invalidateQueries({
+        queryKey: ["finance-master-data", "invoice-account-mapping-autocomplete"],
+      }),
     ]);
 }
 

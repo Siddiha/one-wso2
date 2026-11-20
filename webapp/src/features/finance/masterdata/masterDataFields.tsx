@@ -52,6 +52,7 @@ export function TextInput({
   numeric = false,
   multiline = false,
   disabled = false,
+  helperText,
   onChange,
 }: {
   id: string;
@@ -62,6 +63,8 @@ export function TextInput({
   multiline?: boolean;
   /** Shown but not editable, for a value another field derives. */
   disabled?: boolean;
+  /** A sample value, so the shape expected is readable before it is typed. */
+  helperText?: string;
   onChange: (id: string, value: string | number) => void;
 }) {
   const [touched, setTouched] = useState(false);
@@ -89,6 +92,7 @@ export function TextInput({
       multiline={multiline}
       minRows={multiline ? 2 : undefined}
       disabled={disabled}
+      helperText={helperText}
       // A derived field is driven by its prop, not by the local draft: `text`
       // is seeded once at mount, so a value another field fills in would
       // otherwise never show.
@@ -114,6 +118,7 @@ export function SelectInput({
   options,
   required,
   freeSolo = false,
+  helperText,
   onChange,
 }: {
   id: string;
@@ -122,6 +127,8 @@ export function SelectInput({
   options: readonly string[];
   required: boolean;
   freeSolo?: boolean;
+  /** A sample value, or a note on what the list is. */
+  helperText?: string;
   onChange: (id: string, value: string) => void;
 }) {
   const [touched, setTouched] = useState(false);
@@ -145,6 +152,7 @@ export function SelectInput({
           {...FIELD_PROPS}
           label={label}
           required={required}
+          helperText={helperText}
           error={required && touched && !value}
         />
       )}
@@ -164,6 +172,7 @@ export function IdSelectInput({
   value,
   options,
   required,
+  helperText,
   onChange,
 }: {
   id: string;
@@ -171,6 +180,8 @@ export function IdSelectInput({
   value: number;
   options: readonly LabelledId[];
   required: boolean;
+  /** A sample value, or a note on what the list is. */
+  helperText?: string;
   onChange: (id: string, value: number) => void;
 }) {
   const [touched, setTouched] = useState(false);
@@ -192,6 +203,7 @@ export function IdSelectInput({
           {...FIELD_PROPS}
           label={label}
           required={required}
+          helperText={helperText}
           error={required && touched && !value}
         />
       )}
@@ -211,6 +223,7 @@ export function MultiSelectInput({
   values,
   options,
   required,
+  helperText,
   onChange,
 }: {
   id: string;
@@ -218,6 +231,8 @@ export function MultiSelectInput({
   values: readonly string[];
   options: readonly string[];
   required: boolean;
+  /** Replaces the default "type and press Enter" line — add a sample to it. */
+  helperText?: string;
   onChange: (id: string, values: string[]) => void;
 }) {
   const [touched, setTouched] = useState(false);
@@ -246,10 +261,10 @@ export function MultiSelectInput({
           label={label}
           required={required}
           error={required && touched && values.length === 0}
-          // CustomAutoCompleteTextField.tsx:109 — every multi-select says
-          // this. Without it, that these lists accept values not already on
-          // them is something the reader has to guess.
-          helperText="For custom text, type and press Enter"
+          // Every multi-select says this. Without it, that these lists
+          // accept values not already on them is something the reader has to
+          // guess.
+          helperText={helperText ?? "For custom text, type and press Enter"}
         />
       )}
     />

@@ -253,6 +253,47 @@ export interface InvoiceCostType {
   name: string;
 }
 
+/**
+ * POST body for `invoice-account-mappings/search`. Every key is optional.
+ *
+ * An empty object is a real question rather than an absent one: the backend
+ * builds no WHERE clause for it and answers with the first page of the whole
+ * table, which is what the screen asks for on its first render.
+ */
+export interface InvoiceAccountMappingFilter {
+  invCostTypeIds?: number[];
+  engagementCodes?: string[];
+  engagementCodeSuffixes?: string[];
+  /** An empty string selects the rows that carry no department. */
+  departments?: string[];
+  status?: string[];
+  /** Matched against the account name, number, internal ID, codes and cost type. */
+  searchTerm?: string;
+  /** Page size. The backend defaults to 100 and clamps anything above 500. */
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of mappings, with the total the filter matches across every page. */
+export interface InvoiceAccountMappingPage {
+  mappings: InvoiceAccountMapping[];
+  totalCount: number;
+}
+
+/**
+ * The option lists behind the mapping filters and that tab's form pickers.
+ *
+ * Read from the whole table by the backend rather than derived from the rows
+ * on screen. That distinction is what keeps the options honest once the list
+ * is paged: a code that only appears on page four is still offered.
+ */
+export interface InvoiceAccountMappingAutoComplete {
+  costTypes: LabelledId[];
+  engagementCodes: string[];
+  engagementCodeSuffixes: string[];
+  departments: string[];
+}
+
 // ---- Unions ---------------------------------------------------------------
 
 export type MasterDataRow =

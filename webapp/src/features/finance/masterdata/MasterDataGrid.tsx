@@ -46,15 +46,44 @@ import {
 /** Empty cells read as a dash, not as blank. */
 const EMPTY = "-";
 
-/** Lists render as chips; `valueFormatter` keeps CSV export readable. */
-function ChipList({ values }: { values: string[] }) {
+const CHIP_SX = { fontSize: 11, fontWeight: 600 } as const;
+
+/**
+ * Lists render as chips; `valueFormatter` keeps CSV export readable.
+ *
+ * `max` caps how many are drawn, and the rest become a `+n` chip with the
+ * whole list in a tooltip. A mapping can carry a dozen engagement codes, and
+ * uncapped that one row is as tall as the screen — which makes the table
+ * unreadable precisely when there is the most in it to find. Uncapped by
+ * default, so only the columns that need it pay for it.
+ */
+function ChipList({ values, max }: { values: string[]; max?: number }) {
   if (!values || values.length === 0) return <>{EMPTY}</>;
-  return (
+
+  const shown = max === undefined ? values : values.slice(0, max);
+  const hiddenCount = values.length - shown.length;
+  const chips = (
     <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ py: 0.75 }}>
-      {values.map((v) => (
-        <Chip key={v} label={v} title={v} size="small" sx={{ fontSize: 11, fontWeight: 600 }} />
+      {shown.map((v) => (
+        <Chip key={v} label={v} title={v} size="small" sx={CHIP_SX} />
       ))}
+      {hiddenCount > 0 && (
+        <Chip label={`+${hiddenCount}`} size="small" variant="outlined" sx={CHIP_SX} />
+      )}
     </Stack>
+  );
+
+  // No tooltip when everything is already on screen — one that repeats the
+  // cell is just something that flickers when the pointer crosses the row.
+  if (hiddenCount === 0) return chips;
+  return (
+    <Tooltip
+      arrow
+      placement="top"
+      title={<Box sx={{ p: 0.5, fontSize: 12.5 }}>{values.join(", ")}</Box>}
+    >
+      {chips}
+    </Tooltip>
   );
 }
 
@@ -121,11 +150,20 @@ const text = (): Partial<DataGrid.GridColDef> => ({
     : String(p.value)),
 });
 
-const chips = (): Partial<DataGrid.GridColDef> => ({
-  renderCell: (p) => <ChipList values={(p.value as string[]) ?? []} />,
-  // Export writes "a, b", not "[object Object]".
+const chips = (max?: number): Partial<DataGrid.GridColDef> => ({
+  renderCell: (p) => <ChipList values={(p.value as string[]) ?? []} max={max} />,
+  // Export writes "a, b", not "[object Object]" — and writes every value,
+  // not the `max` the cell shows.
   valueFormatter: (value) => ((value as string[])?.length ? (value as string[]).join(", ") : EMPTY),
 });
+
+/**
+ * Chips shown per mapping code cell before the rest move into the tooltip.
+ *
+ * Four is about two rows at these column widths, which is the height a row
+ * was asked to stay inside.
+ */
+const MAX_MAPPING_CHIPS = 4;
 
 /** Per-tab columns, headers and widths, in the order they're read left to right. */
 const MASTER_DATA_COLUMNS: Record<MasterDataTab, DataGrid.GridColDef[]> = {
@@ -213,32 +251,42 @@ const MASTER_DATA_COLUMNS: Record<MasterDataTab, DataGrid.GridColDef[]> = {
     },
   ],
   invoiceAccountMappings: [
+    // Keyed on the code rather than on the account name, the way the
+    // expense-type tab is: a code identifies one account and a name does not
+    // — several accounts read as "Travel" — so scanning down the names tells
+    // you less per row than scanning down the codes.
     {
-      field: "accountClassification",
-      headerName: "Account Classification",
-      flex: 3,
-      minWidth: 220,
+      field: "accountNumber",
+      headerName: "GL Code",
+      flex: 2,
+      minWidth: 150,
       renderCell: (p) => {
         const r = p.row as InvoiceAccountMapping;
         return (
           <InfoCell
-            text={r.accountClassification}
+            text={r.accountNumber}
             details={[
+              ["Account Name", r.accountClassification ?? ""],
               ["Internal ID", r.internalId ?? ""],
-              ["Account Number", r.accountNumber ?? ""],
             ]}
           />
         );
       },
     },
     { field: "costType", headerName: "Cost Type", flex: 2, minWidth: 160, ...text() },
-    { field: "engagementCodes", headerName: "Engagement Code", flex: 2.5, minWidth: 180, ...chips() },
+    {
+      field: "engagementCodes",
+      headerName: "Engagement Code",
+      flex: 2.5,
+      minWidth: 180,
+      ...chips(MAX_MAPPING_CHIPS),
+    },
     {
       field: "engagementCodeSuffixes",
       headerName: "Engagement Code Suffix",
       flex: 2.5,
       minWidth: 180,
-      ...chips(),
+      ...chips(MAX_MAPPING_CHIPS),
     },
     { field: "department", headerName: "Department", flex: 1.5, minWidth: 130, ...text() },
     {

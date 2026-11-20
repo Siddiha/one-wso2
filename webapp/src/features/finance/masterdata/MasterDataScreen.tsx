@@ -29,6 +29,7 @@ import {
   MASTER_DATA_LABELS,
   type ExpenseTypeAutoComplete,
   type GlCode,
+  type InvoiceAccountMappingAutoComplete,
   type InvoiceCostType,
   type MasterDataRow,
   type MasterDataTab,
@@ -57,6 +58,7 @@ export default function MasterDataScreen({
   autoComplete,
   employeeEmails,
   costTypes,
+  mappingAutoComplete,
   toolbar,
   children,
 }: {
@@ -69,7 +71,8 @@ export default function MasterDataScreen({
   autoComplete?: ExpenseTypeAutoComplete;
   employeeEmails?: string[];
   costTypes?: InvoiceCostType[];
-  /** Extra controls beside "Add New …" — the expense-type filter toggle. */
+  mappingAutoComplete?: InvoiceAccountMappingAutoComplete;
+  /** Extra controls beside "Add New …" — the filter toggles. */
   toolbar?: ReactNode;
   /** Rendered between the header and the table — the expense-type filter bar. */
   children?: ReactNode;
@@ -128,6 +131,7 @@ export default function MasterDataScreen({
           autoComplete={autoComplete}
           employeeEmails={employeeEmails}
           costTypes={costTypes}
+          mappingAutoComplete={mappingAutoComplete}
           onClose={() => setFormRow(undefined)}
         />
       )}

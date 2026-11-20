@@ -57,6 +57,7 @@ import {
   type ExpenseTypeAutoComplete,
   type ExpenseTypePayload,
   type GlCode,
+  type InvoiceAccountMappingAutoComplete,
   type InvoiceAccountMappingPayload,
   type InvoiceCostType,
   type MasterDataPayload,
@@ -84,6 +85,7 @@ export default function MasterDataFormDialog({
   autoComplete,
   employeeEmails,
   costTypes,
+  mappingAutoComplete,
   onClose,
 }: {
   tab: MasterDataTab;
@@ -98,6 +100,8 @@ export default function MasterDataFormDialog({
   employeeEmails?: string[];
   /** Invoice-account-mapping form's Cost Type dropdown. */
   costTypes?: InvoiceCostType[];
+  /** Invoice-account-mapping form's engagement code / department option lists. */
+  mappingAutoComplete?: InvoiceAccountMappingAutoComplete;
   onClose: () => void;
 }) {
   const isCreate = !row;
@@ -130,6 +134,13 @@ export default function MasterDataFormDialog({
       }
       return { ...prev, [key]: value };
     });
+
+  // Several fields at once, for a picker that fills in more than its own box:
+  // the mapping form's GL Code reports the account number, name and internal
+  // ID together, and setting them one at a time would be three renders in
+  // which the form is briefly inconsistent.
+  const setMany = (patch: Record<string, string | number | string[]>) =>
+    setForm((prev) => ({ ...prev, ...patch }));
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -172,13 +183,20 @@ export default function MasterDataFormDialog({
           tab={tab}
           form={form}
           set={set}
+          setMany={setMany}
           glCodes={glCodes}
           autoComplete={autoComplete}
           employeeEmails={employeeEmails}
           costTypes={costTypes}
+          mappingAutoComplete={mappingAutoComplete}
           countryCurrency={countries.data ?? {}}
         />
       </DialogContent>
+      {/* Outside the scrolling content, not at the foot of it. This is how a
+          record is retired, and on the longer forms it used to sit below the
+          fold — so the one control a reader goes looking for when they want a
+          mapping gone was the one they had to scroll to find. */}
+      <StatusToggle value={(form as { status?: string }).status} onChange={set} />
       <DialogActions>
         <Button onClick={onClose} disabled={pending} color="inherit">
           Cancel
@@ -201,19 +219,23 @@ function Fields({
   tab,
   form,
   set,
+  setMany,
   glCodes,
   autoComplete,
   employeeEmails,
   costTypes,
+  mappingAutoComplete,
   countryCurrency,
 }: {
   tab: MasterDataTab;
   form: MasterDataPayload;
   set: (key: string, value: string | number | string[]) => void;
+  setMany: (patch: Record<string, string | number | string[]>) => void;
   glCodes?: GlCode[];
   autoComplete?: ExpenseTypeAutoComplete;
   employeeEmails?: string[];
   costTypes?: InvoiceCostType[];
+  mappingAutoComplete?: InvoiceAccountMappingAutoComplete;
   /** ISO 4217 currency code by country. */
   countryCurrency: Readonly<Record<string, string>>;
 }) {
@@ -353,7 +375,6 @@ function Fields({
               onChange={set}
             />
           </Box>
-          <StatusToggle value={f.status} onChange={set} />
         </>
       );
     }
@@ -361,6 +382,50 @@ function Fields({
     case "invoiceAccountMappings": {
       const f = form as InvoiceAccountMappingPayload;
       const costTypeOptions = (costTypes ?? []).map((c) => ({ id: c.id, label: c.name }));
+
+      // The mapping stores the NetSuite account's number, name and internal
+      // ID as three loose columns, and all three come from one row of the GL
+      // code table. So they are reported by a single GL Code picker rather
+      // than typed into three boxes that can disagree with each other — and
+      // with NetSuite — one character at a time.
+      // Labelled with the code and the account name, not the code alone: the
+      // Autocomplete filters on the label, and someone adding a mapping knows
+      // "the sponsorship account" far more often than its number. The table
+      // itself still leads with the code, which is the unique half.
+      const glCodeOptions = (glCodes ?? []).map((g) => ({
+        id: g.id,
+        label: g.glAccountName ? `${g.glCode} — ${g.glAccountName}` : g.glCode,
+      }));
+      // Resolved back out of the stored account number rather than kept as
+      // its own state, so there is one source of truth and an existing row
+      // opens with its GL code already shown. `glCodeId` is deliberately not
+      // part of the payload: the backend stores the three columns, not the
+      // reference, and sending it would be a 400 on a closed record.
+      const pickedGlCode = (glCodes ?? []).find((g) => g.glCode === f.accountNumber);
+      // A row written before this picker existed can carry an account number
+      // that matches no GL code. Its stored values are still shown and the
+      // rest of the row stays editable; saying so is better than an empty
+      // picker above three filled boxes with no explanation.
+      const unmatchedAccount = !pickedGlCode && f.accountNumber.trim().length > 0;
+
+      const applyGlCode = (glCodeId: number) => {
+        const picked = (glCodes ?? []).find((g) => g.id === glCodeId);
+        if (!picked) {
+          setMany({ accountNumber: "", accountClassification: "", internalId: "" });
+          return;
+        }
+        setMany({
+          accountNumber: picked.glCode,
+          accountClassification: picked.glAccountName,
+          internalId: String(picked.internalId),
+          // `costCenter` is the GL code table's own `department` column — the
+          // backend serves that column under this name. It seeds the field
+          // below rather than replacing it, since a mapping may be filed
+          // under a different department than its account's default.
+          department: picked.costCenter ?? "",
+        });
+      };
+
       // Flagged here rather than on the chips themselves: a rejected value is
       // about the pair of lists, and naming the offending codes back is more
       // use than reddening a field that already looks filled in.
@@ -373,34 +438,59 @@ function Fields({
             value={f.invCostTypeId}
             options={costTypeOptions}
             required
+            helperText="What is being billed — e.g. Air Ticket, Hotel, or Currency for per diem"
             onChange={set}
           />
+          <IdSelectInput
+            id="glCodeId"
+            label="GL Code"
+            value={pickedGlCode?.id ?? 0}
+            options={glCodeOptions}
+            required
+            helperText="The NetSuite account this posts to, by its code — e.g. 61033-003"
+            onChange={(_id, value) => applyGlCode(value)}
+          />
+          {unmatchedAccount && (
+            <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
+              This mapping's account is not one of the GL codes on file, so the GL Code box above
+              is empty. Its stored values are shown below and everything else on this form can
+              still be edited — picking a GL Code will replace them.
+            </Alert>
+          )}
+          {/* Read-only: all three are filled in by the GL Account above. */}
           <TextInput
             id="accountClassification"
             label="Account Classification"
             value={f.accountClassification}
             required
-            onChange={set}
+            disabled
+            helperText="The GL account's name in NetSuite"
+            onChange={() => {}}
           />
           <TextInput
             id="accountNumber"
             label="Account Number"
             value={f.accountNumber}
             required
-            onChange={set}
+            disabled
+            onChange={() => {}}
           />
           <TextInput
             id="internalId"
             label="NetSuite Internal ID"
             value={f.internalId}
             required
-            onChange={set}
+            disabled
+            onChange={() => {}}
           />
-          <TextInput
+          <SelectInput
             id="department"
             label="Department"
             value={f.department}
+            options={mappingAutoComplete?.departments ?? []}
             required={false}
+            freeSolo
+            helperText="Seeded from the GL Code. Leave blank for an Intercompany mapping."
             onChange={set}
           />
           {/* Boxed together under a warning line for the same reason the
@@ -414,26 +504,29 @@ function Fields({
               id="engagementCodes"
               label="Engagement Codes"
               values={f.engagementCodes}
-              options={[]}
+              options={mappingAutoComplete?.engagementCodes ?? []}
               required={false}
+              helperText="Pick a code already in use, or type a new one and press Enter"
               onChange={set}
             />
             <MultiSelectInput
               id="engagementCodeSuffixes"
               label="Engagement Code Suffixes"
               values={f.engagementCodeSuffixes}
-              options={[]}
+              options={mappingAutoComplete?.engagementCodeSuffixes ?? []}
               required={false}
+              helperText="Matches any engagement code ending in this. Type and press Enter"
               onChange={set}
             />
           </Box>
-          {badCodes.length > 0 && (
-            <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
-              These cannot be saved as typed. Use only letters, digits, hyphens, dots
-              or underscores, one code per entry: {badCodes.join(" · ")}
-            </Alert>
-          )}
-          <StatusToggle value={f.status} onChange={set} />
+          {/* Info, not an error: nothing has gone wrong until one of these
+              is actually typed, and the format is worth reading beforehand. */}
+          <Alert severity={badCodes.length > 0 ? "warning" : "info"} variant="outlined" sx={{ mt: 1 }}>
+            {badCodes.length > 0
+              ? "These cannot be saved as typed — use letters, digits, hyphens, dots or " +
+                `underscores only, one code per entry: ${badCodes.join(" \u00b7 ")}`
+              : "Codes may use letters, digits, hyphens, dots and underscores, one code per entry."}
+          </Alert>
         </>
       );
     }
@@ -483,7 +576,6 @@ function Fields({
             multiline
             onChange={set}
           />
-          <StatusToggle value={f.status} onChange={set} />
         </>
       );
     }
@@ -510,7 +602,9 @@ function StatusToggle({
   const active = value === MASTER_DATA_STATUS.active;
   return (
     <FormControlLabel
-      sx={{ mt: 0.5 }}
+      // Its own padding, now that it sits between the content and the
+      // actions rather than inside the scrolling field list.
+      sx={{ px: 3, py: 1.5, mr: 0 }}
       control={
         <Switch
           checked={active}

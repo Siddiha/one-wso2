@@ -701,6 +701,12 @@ export const financeMasterDataServiceUrls = {
   countries: `${financeMasterDataBackendUrl}/countries`,
   // Invoice cost types served by ONE_WSO2_FINANCE_MASTER_DATA_BACKEND_URL.
   invoiceCostTypes: `${financeMasterDataBackendUrl}/invoice-cost-types`,
+  // The mappings are read through a POST filter like expense types, and for
+  // the same reason: the filter carries several engagement codes at once and
+  // the page is asked for by size and offset.
+  searchInvoiceAccountMappings: `${financeMasterDataBackendUrl}/invoice-account-mappings/search`,
+  invoiceAccountMappingAutocomplete:
+    `${financeMasterDataBackendUrl}/invoice-account-mappings/autocomplete-values`,
 };
 
 // ---- Updates Manager backend ---------------------------------------------

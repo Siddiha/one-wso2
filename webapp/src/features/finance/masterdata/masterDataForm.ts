@@ -76,9 +76,9 @@ export const INITIAL_SORT_FIELD: Record<MasterDataTab, string> = {
   departments: "employeeDepartment",
   expenseTypes: "expenseType",
   creditCards: "employeeEmail",
-  // By account name rather than by code: the mappings are read as "which
-  // account does this post to", and the codes are the lookup, not the label.
-  invoiceAccountMappings: "accountClassification",
+  // By GL code, which is the column the table now leads with — a code
+  // identifies one account where a name can repeat across several.
+  invoiceAccountMappings: "accountNumber",
 };
 
 /**

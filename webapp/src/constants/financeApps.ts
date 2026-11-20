@@ -179,7 +179,7 @@ export const FINANCE_MASTER_DATA_APPS: readonly MenuApp[] = [
       { id: "master-data-departments", label: "Departments", desc: "Departments, engagement codes and their GL codes.", requires: ["admin"], path: masterDataPaths.departments },
       { id: "master-data-expense-types", label: "Expense Types", desc: "The expense catalogue and the engagements each type is valid for.", requires: ["admin"], path: masterDataPaths.expenseTypes },
       { id: "master-data-credit-cards", label: "Credit Cards", desc: "The corporate card register and who approves each card's spend.", requires: ["admin"], path: masterDataPaths.creditCards },
-      { id: "master-data-invoice-account-mappings", label: "Invoice Account Mappings", desc: "Which NetSuite account a travel invoice or per diem bill posts to.", requires: ["admin"], path: masterDataPaths.invoiceAccountMappings },
+      { id: "master-data-invoice-account-mappings", label: "Invoice Accounts", desc: "Which NetSuite account a travel invoice or per diem bill posts to.", requires: ["admin"], path: masterDataPaths.invoiceAccountMappings },
     ],
   },
 ];
