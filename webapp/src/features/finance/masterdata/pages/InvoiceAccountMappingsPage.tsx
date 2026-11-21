@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -38,9 +38,9 @@ import {
   useInvoiceCostTypes,
 } from "../useMasterData";
 import {
-  applyInvoiceMappingFilters,
   countActiveInvoiceMappingFilters,
   getInvoiceMappingFilterOptions,
+  toInvoiceMappingRequest,
   type InvoiceMappingFilter,
 } from "../invoiceMappingFilters";
 
@@ -59,15 +59,22 @@ const fadeTransition = (ms: number, ease: string, delay = 0) =>
   FADE_PROPS.map((prop) => `${prop} ${ms}ms ${ease} ${delay}ms`).join(", ");
 
 /**
- * Rows asked for in one go.
+ * Rows on a page, and the sizes the grid's footer offers.
  *
- * The search endpoint pages, and this is the largest page it will serve. The
- * table holds a few hundred rows, so one page is the whole table today — but
- * it is a page, and `totalCount` is what says whether it still is. When it
- * stops being one, the filters move to the request instead of being applied
- * here, which is what the endpoint already takes them for.
+ * These match the other tabs' grid so the footer reads the same, and the
+ * largest is inside the 500 the endpoint clamps to — asking for more would
+ * silently get 500 back and leave the grid believing it had the rest.
  */
-const MAPPING_PAGE_SIZE = 500;
+const MAPPING_PAGE_SIZE = 100;
+
+/**
+ * How long the search box waits before it becomes a request.
+ *
+ * The box is no longer narrowing rows already in the browser; every settled
+ * value is a query. Short enough to feel like typing, long enough that a
+ * ten-character engagement code is one request rather than ten.
+ */
+const SEARCH_DEBOUNCE_MS = 350;
 
 /**
  * The invoice account classification mappings.
@@ -88,19 +95,53 @@ const MAPPING_PAGE_SIZE = 500;
  * retired one, looked up when something old has to be brought back.
  */
 export default function InvoiceAccountMappingsPage() {
-  const query = useInvoiceAccountMappings({ limit: MAPPING_PAGE_SIZE });
+  const [showFilters, setShowFilters] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+  const [search, setSearch] = useState("");
+  // What the box shows, and what the request asks for — the second follows
+  // the first once the typing stops.
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState<InvoiceMappingFilter>({});
+  const [pageModel, setPageModel] = useState({ page: 0, pageSize: MAPPING_PAGE_SIZE });
+  // So clearing the box leaves the cursor in it, ready for the next attempt.
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const costTypes = useInvoiceCostTypes();
   const autoComplete = useInvoiceAccountMappingAutoComplete();
   // The mapping form's GL Code picker, which fills in the account number,
   // name and internal ID together.
   const glCodes = useGlCodes();
 
-  const [showFilters, setShowFilters] = useState(false);
-  const [showInactive, setShowInactive] = useState(false);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<InvoiceMappingFilter>({});
-  // So clearing the box leaves the cursor in it, ready for the next attempt.
-  const searchRef = useRef<HTMLInputElement>(null);
+  // Every narrowing goes to the endpoint, so the reader is paging the whole
+  // table and not the page they happen to be holding.
+  const { request, ready } = useMemo(
+    () =>
+      toInvoiceMappingRequest({
+        filter,
+        showInactive,
+        search: searchTerm,
+        costTypes: autoComplete.data?.costTypes,
+        page: pageModel.page,
+        pageSize: pageModel.pageSize,
+      }),
+    [filter, showInactive, searchTerm, autoComplete.data?.costTypes, pageModel],
+  );
+  const query = useInvoiceAccountMappings(request, ready);
+
+  /**
+   * Back to the first page whenever the question changes.
+   *
+   * Page four of a narrower result may not exist, and the empty table that
+   * would come back is the one answer a reader cannot tell apart from
+   * "nothing matches". Done in the handlers rather than in an effect on the
+   * filter, so the narrower question is never asked for the old page first.
+   */
+  const firstPage = () => setPageModel((model) => (model.page === 0 ? model : { ...model, page: 0 }));
 
   const rows = useMemo(() => query.data?.mappings ?? [], [query.data]);
   const totalCount = query.data?.totalCount ?? 0;
@@ -108,17 +149,14 @@ export default function InvoiceAccountMappingsPage() {
     () => getInvoiceMappingFilterOptions(rows, autoComplete.data),
     [rows, autoComplete.data],
   );
-  const visibleRows = useMemo(
-    () => applyInvoiceMappingFilters(rows, filter, showInactive, search),
-    [rows, filter, showInactive, search],
-  );
   const activeCount = countActiveInvoiceMappingFilters(filter);
 
   return (
     <MasterDataScreen
       tab="invoiceAccountMappings"
-      rows={visibleRows}
+      rows={rows}
       loading={query.isLoading}
+      pagination={{ rowCount: totalCount, model: pageModel, onModelChange: setPageModel }}
       error={query.isError ? query.error : undefined}
       onRetry={() => {
         void query.refetch();
@@ -139,7 +177,10 @@ export default function InvoiceAccountMappingsPage() {
             size="small"
             placeholder="Search mappings"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              firstPage();
+            }}
             sx={{ width: 260 }}
             slotProps={{
               htmlInput: { "aria-label": "Search mappings", ref: searchRef },
@@ -157,6 +198,7 @@ export default function InvoiceAccountMappingsPage() {
                       aria-label="Clear search"
                       onClick={() => {
                         setSearch("");
+                        firstPage();
                         searchRef.current?.focus();
                       }}
                     >
@@ -173,7 +215,10 @@ export default function InvoiceAccountMappingsPage() {
               <Switch
                 size="small"
                 checked={showInactive}
-                onChange={(_e, checked) => setShowInactive(checked)}
+                onChange={(_e, checked) => {
+                  setShowInactive(checked);
+                  firstPage();
+                }}
               />
             }
             label="Show Inactive"
@@ -194,15 +239,6 @@ export default function InvoiceAccountMappingsPage() {
         </>
       }
     >
-      {/* The rows arrive a page at a time. One page has been the whole table
-          so far, so this says nothing — but it is the only thing that would,
-          and a table quietly missing its tail is worse than a line of text. */}
-      {totalCount > rows.length && (
-        <Alert severity="info" variant="outlined" sx={{ mb: 2 }}>
-          Showing the first {rows.length} of {totalCount} mappings. Use the search box or the
-          filters to narrow down to the one you are looking for.
-        </Alert>
-      )}
 
       {/* The cost types failing is its own failure, not the table's: the rows
           can be entirely fine while the form's required Cost Type picker has
@@ -224,6 +260,48 @@ export default function InvoiceAccountMappingsPage() {
         </Alert>
       )}
 
+      {/* The option lists failing leaves the filter bar with nothing to
+          offer, and a bar of empty pickers is the only thing that would
+          otherwise say so. It also keeps the cost type filter honest: the
+          request is held back while a selected cost type cannot be turned
+          into the id the endpoint filters on, and this is what explains the
+          wait rather than letting the table sit there looking empty. */}
+      {autoComplete.isError && (
+        <Alert
+          severity="error"
+          variant="outlined"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => void autoComplete.refetch()}>
+              Retry
+            </Button>
+          }
+        >
+          {MASTER_DATA_SNACK.error.autoComplete}
+        </Alert>
+      )}
+
+      {/* The GL Code picker failing stops a mapping being added at all: the
+          account number, name and internal ID are filled from it and cannot
+          be typed, so the form opens with its three required account fields
+          disabled and no way to complete them. Its own message and its own
+          retry, because the rows are usually fine — and when the rows are
+          fine the screen's retry is not on screen to be used. */}
+      {glCodes.isError && (
+        <Alert
+          severity="error"
+          variant="outlined"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => void glCodes.refetch()}>
+              Retry
+            </Button>
+          }
+        >
+          {MASTER_DATA_SNACK.error.glCodes}
+        </Alert>
+      )}
+
       {/* flexShrink: 0 stops the flex-column parent squeezing Collapse and
           clipping the buttons. The fade hides Collapse un-clipping the
           filters a row at a time. */}
@@ -241,8 +319,14 @@ export default function InvoiceAccountMappingsPage() {
             filter={filter}
             options={options}
             activeCount={activeCount}
-            onChange={setFilter}
-            onClear={() => setFilter({})}
+            onChange={(next) => {
+              setFilter(next);
+              firstPage();
+            }}
+            onClear={() => {
+              setFilter({});
+              firstPage();
+            }}
           />
         </Box>
       </Collapse>

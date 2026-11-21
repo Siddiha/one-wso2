@@ -46,7 +46,7 @@ export const MASTER_DATA_LABELS: Record<MasterDataTab, string> = {
   departments: "Departments",
   expenseTypes: "Expense Types",
   creditCards: "Credit Cards",
-  invoiceAccountMappings: "Invoice Account Mappings",
+  invoiceAccountMappings: "Invoice Accounts",
 };
 
 // ---- Subsidiaries ---------------------------------------------------------

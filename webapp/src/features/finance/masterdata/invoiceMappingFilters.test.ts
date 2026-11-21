@@ -16,19 +16,19 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  applyInvoiceMappingFilters,
   countActiveInvoiceMappingFilters,
   getInvoiceMappingFilterOptions,
-  isActiveMapping,
   NO_DEPARTMENT,
+  toInvoiceMappingRequest,
 } from "./invoiceMappingFilters";
 import type {
   InvoiceAccountMapping,
   InvoiceAccountMappingAutoComplete,
 } from "./masterDataTypes";
 
-// The bar narrows rows already on screen, so every case here is a plain
-// input/output assertion over a small table.
+// The bar no longer narrows rows on screen — it builds the filter the search
+// endpoint is asked with — so the cases below are about the request that comes
+// out of it, plus the option lists the bar offers.
 
 const mapping = (over: Partial<InvoiceAccountMapping> & { id: number }): InvoiceAccountMapping => ({
   internalId: "1001",
@@ -58,17 +58,6 @@ const ROWS: InvoiceAccountMapping[] = [
   // screen carry.
   mapping({ id: 3, engagementCodes: ["CS-SUB-IAM"], department: "", status: "active" }),
 ];
-
-describe("isActiveMapping", () => {
-  // The column holds a mix of "Active" and "active" from older writes, so
-  // whether a row is active cannot depend on which spelling it carries.
-  it("reads either casing as active", () => {
-    expect(isActiveMapping(mapping({ id: 1, status: "Active" }))).toBe(true);
-    expect(isActiveMapping(mapping({ id: 1, status: "active" }))).toBe(true);
-    expect(isActiveMapping(mapping({ id: 1, status: " ACTIVE " }))).toBe(true);
-    expect(isActiveMapping(mapping({ id: 1, status: "Inactive" }))).toBe(false);
-  });
-});
 
 describe("getInvoiceMappingFilterOptions", () => {
   it("offers each cost type once, in name order", () => {
@@ -135,106 +124,92 @@ describe("getInvoiceMappingFilterOptions", () => {
   });
 });
 
-describe("applyInvoiceMappingFilters", () => {
-  // Status is not a filter but a switch, and it starts off: a retired mapping
-  // is looked up on purpose, not browsed past on the way to a live one.
-  it("hides the inactive rows unless asked for them", () => {
-    expect(applyInvoiceMappingFilters(ROWS, {}).map((row) => row.id)).toEqual([1, 3]);
-    expect(applyInvoiceMappingFilters(ROWS, {}, true).map((row) => row.id)).toEqual([1, 2, 3]);
+describe("toInvoiceMappingRequest", () => {
+  const COST_TYPES = [
+    { id: 1, label: "Air Ticket" },
+    { id: 4, label: "Currency (per diem / allowances)" },
+  ];
+  const build = (over: Partial<Parameters<typeof toInvoiceMappingRequest>[0]> = {}) =>
+    toInvoiceMappingRequest({
+      filter: {},
+      showInactive: false,
+      search: "",
+      costTypes: COST_TYPES,
+      page: 0,
+      pageSize: 100,
+      ...over,
+    });
+
+  // An empty filter is a real question — "all of them" — so the request
+  // carries only the page, and the endpoint builds no WHERE clause for it.
+  it("asks for the first page and nothing else when nothing is selected", () => {
+    expect(build({ showInactive: true }).request).toEqual({ limit: 100, offset: 0 });
   });
 
-  it("narrows to one cost type", () => {
-    const kept = applyInvoiceMappingFilters(ROWS, { costTypes: ["Air Ticket"] }, true);
-    expect(kept.map((row) => row.id)).toEqual([1, 3]);
+  it("turns the page into a limit and an offset", () => {
+    expect(build({ page: 3, pageSize: 25 }).request).toMatchObject({ limit: 25, offset: 75 });
   });
 
-  it("treats several values in one filter as an OR", () => {
-    const kept = applyInvoiceMappingFilters(
-      ROWS,
-      { engagementCodes: ["RND-GEN-INT", "CS-SUB-IAM"] },
-      true,
-    );
-    expect(kept.map((row) => row.id)).toEqual([1, 3]);
+  // Status is the switch, not a filter: off means active only, and on asks
+  // for everything rather than for both spellings.
+  it("sends the active status only while Show Inactive is off", () => {
+    expect(build().request.status).toEqual(["active"]);
+    expect(build({ showInactive: true }).request.status).toBeUndefined();
   });
 
-  it("treats two filters as an AND", () => {
-    const kept = applyInvoiceMappingFilters(
-      ROWS,
-      { costTypes: ["Air Ticket"], departments: ["Engineering"] },
-      true,
-    );
-    expect(kept.map((row) => row.id)).toEqual([1]);
+  it("maps a cost type label to the id the endpoint filters on", () => {
+    const { request, ready } = build({ filter: { costTypes: ["Air Ticket"] } });
+    expect(request.invCostTypeIds).toEqual([1]);
+    expect(ready).toBe(true);
   });
 
-  // A filter and the switch are an AND too: narrowing to an inactive row's
-  // cost type must not bring that row back while the switch is off.
-  it("does not let a filter reveal an inactive row", () => {
-    const filter = { engagementCodeSuffixes: ["ROT"] };
-    expect(applyInvoiceMappingFilters(ROWS, filter)).toEqual([]);
-    expect(applyInvoiceMappingFilters(ROWS, filter, true).map((row) => row.id)).toEqual([2]);
+  // The one failure that must not widen the table. With the labels on screen
+  // but their ids not yet known, dropping `invCostTypeIds` would return every
+  // cost type — so the request is held instead.
+  it("is not ready while a selected cost type has no id yet", () => {
+    const { request, ready } = build({
+      filter: { costTypes: ["Air Ticket"] },
+      costTypes: undefined,
+    });
+    expect(ready).toBe(false);
+    expect(request.invCostTypeIds).toBeUndefined();
   });
 
-  it("finds the rows carrying no department", () => {
-    const kept = applyInvoiceMappingFilters(ROWS, { departments: [NO_DEPARTMENT] }, true);
-    expect(kept.map((row) => row.id)).toEqual([3]);
+  it("is not ready when only some of the selected cost types resolve", () => {
+    expect(build({ filter: { costTypes: ["Air Ticket", "Hotel"] } }).ready).toBe(false);
   });
 
-  it("matches a suffix on the suffix list, not on the codes", () => {
+  // Blank is a real department, carried on purpose by the Intercompany rows.
+  // The option reads "(None)"; the endpoint spells it as an empty string.
+  it("sends no department as an empty string", () => {
+    expect(build({ filter: { departments: [NO_DEPARTMENT] } }).request.departments).toEqual([""]);
     expect(
-      applyInvoiceMappingFilters(ROWS, { engagementCodeSuffixes: ["RND-GEN-INT"] }, true),
-    ).toHaveLength(0);
+      build({ filter: { departments: ["Marketing", NO_DEPARTMENT] } }).request.departments,
+    ).toEqual(["Marketing", ""]);
   });
 
-  it("returns nothing when a selection matches no row", () => {
-    expect(applyInvoiceMappingFilters(ROWS, { costTypes: ["Hotel"] }, true)).toEqual([]);
-  });
-});
-
-describe("the search box", () => {
-  const find = (term: string) =>
-    applyInvoiceMappingFilters(ROWS, {}, true, term).map((row) => row.id);
-
-  it("leaves every row in when it is blank", () => {
-    expect(find("")).toEqual([1, 2, 3]);
-    expect(find("   ")).toEqual([1, 2, 3]);
+  it("passes the code lists through untouched", () => {
+    const { request } = build({
+      filter: { engagementCodes: ["RND-GEN-INT"], engagementCodeSuffixes: ["ROT"] },
+    });
+    expect(request.engagementCodes).toEqual(["RND-GEN-INT"]);
+    expect(request.engagementCodeSuffixes).toEqual(["ROT"]);
   });
 
-  it("matches the GL code and the account name", () => {
-    expect(find("61033-001")).toEqual([1, 2, 3]);
-    expect(find("Air Ticket")).toEqual([1, 2, 3]);
+  // An empty array is the same question as no filter at all, and leaving the
+  // key in would have the endpoint build a condition that matches nothing.
+  it("leaves an empty selection out of the request entirely", () => {
+    const { request } = build({
+      filter: { costTypes: [], engagementCodes: [], departments: [] },
+      showInactive: true,
+    });
+    expect(request).toEqual({ limit: 100, offset: 0 });
   });
 
-  // The codes are how a mapping is looked up in practice, so the search has
-  // to reach into both lists rather than only the plain columns.
-  it("reaches into the engagement codes and the suffixes", () => {
-    expect(find("CS-SUB-IAM")).toEqual([3]);
-    expect(find("ROT")).toEqual([2]);
-  });
-
-  it("matches the cost type, department and internal ID", () => {
-    expect(find("per diem")).toEqual([2]);
-    expect(find("Marketing")).toEqual([2]);
-    expect(find("1001")).toEqual([1, 2, 3]);
-  });
-
-  it("ignores case", () => {
-    expect(find("mkt-gen-rot")).toEqual([2]);
-  });
-
-  // Otherwise typing a second word would widen the result, which reads as
-  // the search getting worse the more you tell it.
-  it("narrows on each word rather than widening", () => {
-    expect(find("Currency Marketing")).toEqual([2]);
-    expect(find("Currency Engineering")).toEqual([]);
-  });
-
-  it("finds nothing for a term no row carries", () => {
-    expect(find("nonexistent")).toEqual([]);
-  });
-
-  // The switch still wins: searching must not surface a retired mapping.
-  it("does not reveal an inactive row", () => {
-    expect(applyInvoiceMappingFilters(ROWS, {}, false, "MKT-GEN-ROT")).toEqual([]);
+  it("trims the search term and omits a blank one", () => {
+    expect(build({ search: "  MKT-GEN  " }).request.searchTerm).toBe("MKT-GEN");
+    expect(build({ search: "   " }).request.searchTerm).toBeUndefined();
+    expect(build({ search: "" }).request.searchTerm).toBeUndefined();
   });
 });
 

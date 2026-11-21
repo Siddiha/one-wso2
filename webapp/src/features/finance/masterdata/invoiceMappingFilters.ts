@@ -16,19 +16,24 @@
 
 // Narrowing for the Invoice Account Mappings table.
 //
-// Applied to the rows the screen is holding rather than sent to the backend.
-// The search endpoint takes the same filters — see `InvoiceAccountMappingFilter`
-// in masterDataTypes — so this moves server-side by passing the filter through
-// instead of mapping it; what is here is the browser-side half.
+// The narrowing is done by the backend, not here: this turns what the filter
+// bar, the search box and the Show Inactive switch are holding into the
+// `InvoiceAccountMappingFilter` the search endpoint takes. Filtering the rows
+// in the browser would only ever narrow the page already fetched, so a value
+// on page two could not be found at all — which is the whole reason the
+// endpoint pages and counts.
 //
-// Status is deliberately not one of these filters. A reader wants the active
-// mappings almost every time, so it is a single "Show Inactive" switch beside
-// the table instead of a value buried in a panel that has to be opened first.
+// Status is deliberately not one of the bar's filters. A reader wants the
+// active mappings almost every time, so it is a single "Show Inactive" switch
+// beside the table instead of a value buried in a panel that has to be opened
+// first.
 
 import {
   MASTER_DATA_STATUS,
   type InvoiceAccountMapping,
   type InvoiceAccountMappingAutoComplete,
+  type InvoiceAccountMappingFilter,
+  type LabelledId,
 } from "./masterDataTypes";
 
 /** Each key narrows the rows, and the values within one key are an OR. */
@@ -58,17 +63,6 @@ export interface InvoiceMappingFilterOptions {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
-}
-
-/** A row's department as the filter names it, blank included. */
-function departmentOf(mapping: InvoiceAccountMapping): string {
-  const department = mapping.department?.trim() ?? "";
-  return department.length > 0 ? department : NO_DEPARTMENT;
-}
-
-/** Whether a row is active, however its casing was written. */
-export function isActiveMapping(mapping: InvoiceAccountMapping): boolean {
-  return (mapping.status ?? "").trim().toLowerCase() === MASTER_DATA_STATUS.active;
 }
 
 /**
@@ -113,65 +107,70 @@ export function getInvoiceMappingFilterOptions(
   };
 }
 
-/** True when nothing is selected, which leaves every row in. */
-function keeps(selected: string[] | undefined, held: readonly string[]): boolean {
-  if (!selected || selected.length === 0) return true;
-  return selected.some((value) => held.includes(value));
+/** What the screen is holding, as one argument rather than five positional ones. */
+export interface InvoiceMappingRequestInput {
+  filter: InvoiceMappingFilter;
+  showInactive: boolean;
+  search: string;
+  /** Cost types as the autocomplete lists them, to turn a label into its id. */
+  costTypes?: LabelledId[];
+  page: number;
+  pageSize: number;
 }
 
 /**
- * Everything the search box reads, as one lower-cased string.
+ * The filter the search endpoint takes, and whether it can be asked yet.
  *
- * The same columns the backend's `searchTerm` covers, so searching here and
- * searching server-side find the same rows. Deliberately includes the two
- * code lists: the codes are how a mapping is looked up in practice, and they
- * are the thing a reader arrives already knowing.
+ * `ready` is false only while a cost type is selected whose id is not known —
+ * the autocomplete has not landed, or failed. Sending the request anyway
+ * would drop `invCostTypeIds` and so return MORE rows than the reader asked
+ * for, which is the one way a filter must never fail.
  */
-function searchableText(row: InvoiceAccountMapping): string {
-  return [
-    row.accountNumber,
-    row.accountClassification,
-    row.internalId,
-    row.costType,
-    row.department ?? "",
-    ...(row.engagementCodes ?? []),
-    ...(row.engagementCodeSuffixes ?? []),
-  ]
-    .join(" ")
-    .toLowerCase();
+export interface InvoiceMappingRequest {
+  request: InvoiceAccountMappingFilter;
+  ready: boolean;
 }
 
-/** Whether a row matches the search box, which is blank most of the time. */
-function matchesSearch(row: InvoiceAccountMapping, search: string): boolean {
-  const term = search.trim().toLowerCase();
-  if (term.length === 0) return true;
-  // Every whitespace-separated word has to appear somewhere in the row, so
-  // "hotel marketing" narrows rather than widening to either one.
-  return term.split(/\s+/).every((word) => searchableText(row).includes(word));
-}
+/** Turn the screen's state into the search endpoint's filter. */
+export function toInvoiceMappingRequest({
+  filter,
+  showInactive,
+  search,
+  costTypes,
+  page,
+  pageSize,
+}: InvoiceMappingRequestInput): InvoiceMappingRequest {
+  const selectedCostTypes = filter.costTypes ?? [];
+  const byLabel = new Map((costTypes ?? []).map((entry) => [entry.label, entry.id]));
+  const invCostTypeIds = selectedCostTypes
+    .map((label) => byLabel.get(label))
+    .filter((id): id is number => id !== undefined);
 
-/**
- * The rows left after the filter bar and the Show Inactive switch.
- *
- * `showInactive` and `search` are separate arguments rather than filter keys,
- * because neither is one: both sit outside the panel, and the panel's Clear
- * button should not empty a search box the reader can see is still full.
- */
-export function applyInvoiceMappingFilters(
-  rows: readonly InvoiceAccountMapping[],
-  filter: InvoiceMappingFilter,
-  showInactive = false,
-  search = "",
-): InvoiceAccountMapping[] {
-  return rows.filter(
-    (row) =>
-      (showInactive || isActiveMapping(row)) &&
-      matchesSearch(row, search) &&
-      keeps(filter.costTypes, [row.costType]) &&
-      keeps(filter.engagementCodes, row.engagementCodes ?? []) &&
-      keeps(filter.engagementCodeSuffixes, row.engagementCodeSuffixes ?? []) &&
-      keeps(filter.departments, [departmentOf(row)]),
+  // `NO_DEPARTMENT` is how the option reads; the backend spells the same
+  // thing as an empty string, and treats it as "no department on the row".
+  const departments = (filter.departments ?? []).map((value) =>
+    value === NO_DEPARTMENT ? "" : value,
   );
+  const term = search.trim();
+
+  return {
+    ready: invCostTypeIds.length === selectedCostTypes.length,
+    request: {
+      ...(invCostTypeIds.length > 0 ? { invCostTypeIds } : {}),
+      ...(filter.engagementCodes?.length ? { engagementCodes: filter.engagementCodes } : {}),
+      ...(filter.engagementCodeSuffixes?.length
+        ? { engagementCodeSuffixes: filter.engagementCodeSuffixes }
+        : {}),
+      ...(departments.length > 0 ? { departments } : {}),
+      // Omitted rather than sent as both values: no status filter is already
+      // every status, and the two spellings would only be a longer way of
+      // asking the same question.
+      ...(showInactive ? {} : { status: [MASTER_DATA_STATUS.active] }),
+      ...(term.length > 0 ? { searchTerm: term } : {}),
+      limit: pageSize,
+      offset: page * pageSize,
+    },
+  };
 }
 
 /** How many filters are narrowing the table, for the toggle's badge. */

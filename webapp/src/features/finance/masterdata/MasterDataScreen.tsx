@@ -22,7 +22,7 @@ import { FINANCE_EYEBROW } from "@constants/financeApps";
 import FinanceShell from "../components/FinanceShell";
 import MasterDataDeleteDialog from "./MasterDataDeleteDialog";
 import MasterDataFormDialog from "./MasterDataFormDialog";
-import MasterDataGrid from "./MasterDataGrid";
+import MasterDataGrid, { type MasterDataPagination } from "./MasterDataGrid";
 import { MASTER_DATA_FORM_COPY, MASTER_DATA_SNACK, MASTER_DATA_SUBTITLES } from "./masterDataUiText";
 import { isFinanceMasterDataBackendConfigured } from "./useMasterData";
 import {
@@ -62,6 +62,7 @@ export default function MasterDataScreen({
   toolbar,
   children,
   showGridSearch = true,
+  pagination,
 }: {
   tab: MasterDataTab;
   rows: MasterDataRow[];
@@ -79,6 +80,8 @@ export default function MasterDataScreen({
   children?: ReactNode;
   /** False where the page puts its own search box above the table. */
   showGridSearch?: boolean;
+  /** Set where the rows are a server-side page rather than the whole table. */
+  pagination?: MasterDataPagination;
 }) {
   // `undefined` = closed. `null` = open for a NEW record. A row = editing it.
   // Three states in one value, because "the add dialog" and "the edit dialog"
@@ -118,6 +121,7 @@ export default function MasterDataScreen({
           rows={rows}
           loading={loading}
           showSearch={showGridSearch}
+          pagination={pagination}
           onEdit={setFormRow}
           onDelete={setDeleteRow}
         />

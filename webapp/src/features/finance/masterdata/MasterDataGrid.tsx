@@ -49,6 +49,12 @@ const EMPTY = "-";
 
 const CHIP_SX = { fontSize: 11, fontWeight: 600 } as const;
 
+// A small MUI Chip and the wrap gap between two rows of them, in px. Used to
+// turn a line count into the pixel height that caps a cell.
+const CHIP_ROW_PX = 24;
+const CHIP_GAP_PX = 4;
+const CHIP_PAD_PX = 12;
+
 /**
  * Lists render as chips; `valueFormatter` keeps CSV export readable.
  *
@@ -57,14 +63,36 @@ const CHIP_SX = { fontSize: 11, fontWeight: 600 } as const;
  * uncapped that one row is as tall as the screen — which makes the table
  * unreadable precisely when there is the most in it to find. Uncapped by
  * default, so only the columns that need it pay for it.
+ *
+ * `lines` caps the height as well, because `max` alone cannot: it counts
+ * chips, and how many of them fit on a line depends on the column width and
+ * on how long the codes are. At a narrow width a code like MKT-BU_CORP-GEN
+ * takes a line to itself, so four chips meant four lines. With `lines` set
+ * the cell stops at that many rows whatever the width, and the tooltip
+ * carries the whole list — so a value hidden by the cap OR by the clip is
+ * still readable, which is why the tooltip goes on as soon as there is more
+ * than one value rather than only when `max` dropped some.
  */
-function ChipList({ values, max }: { values: string[]; max?: number }) {
+function ChipList({ values, max, lines }: { values: string[]; max?: number; lines?: number }) {
   if (!values || values.length === 0) return <>{EMPTY}</>;
 
   const shown = max === undefined ? values : values.slice(0, max);
   const hiddenCount = values.length - shown.length;
   const chips = (
-    <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ py: 0.75 }}>
+    <Stack
+      direction="row"
+      gap={0.5}
+      flexWrap="wrap"
+      sx={{
+        py: 0.75,
+        ...(lines === undefined
+          ? {}
+          : {
+              maxHeight: lines * CHIP_ROW_PX + (lines - 1) * CHIP_GAP_PX + CHIP_PAD_PX,
+              overflow: "hidden",
+            }),
+      }}
+    >
       {shown.map((v) => (
         <Chip key={v} label={v} title={v} size="small" sx={CHIP_SX} />
       ))}
@@ -74,9 +102,11 @@ function ChipList({ values, max }: { values: string[]; max?: number }) {
     </Stack>
   );
 
-  // No tooltip when everything is already on screen — one that repeats the
-  // cell is just something that flickers when the pointer crosses the row.
-  if (hiddenCount === 0) return chips;
+  // No tooltip when there is one value and nothing can be hidden — one that
+  // repeats the cell is just something that flickers when the pointer
+  // crosses the row.
+  const mayHide = hiddenCount > 0 || (lines !== undefined && values.length > 1);
+  if (!mayHide) return chips;
   return (
     <Tooltip
       arrow
@@ -86,6 +116,14 @@ function ChipList({ values, max }: { values: string[]; max?: number }) {
       {chips}
     </Tooltip>
   );
+}
+
+/** Which page of rows the grid is showing, and how many there are in all. */
+export interface MasterDataPagination {
+  /** Rows the filter matches across every page, for the grid's row count. */
+  rowCount: number;
+  model: { page: number; pageSize: number };
+  onModelChange: (model: { page: number; pageSize: number }) => void;
 }
 
 /**
@@ -151,8 +189,8 @@ const text = (): Partial<DataGrid.GridColDef> => ({
     : String(p.value)),
 });
 
-const chips = (max?: number): Partial<DataGrid.GridColDef> => ({
-  renderCell: (p) => <ChipList values={(p.value as string[]) ?? []} max={max} />,
+const chips = (max?: number, lines?: number): Partial<DataGrid.GridColDef> => ({
+  renderCell: (p) => <ChipList values={(p.value as string[]) ?? []} max={max} lines={lines} />,
   // Export writes "a, b", not "[object Object]" — and writes every value,
   // not the `max` the cell shows.
   valueFormatter: (value) => ((value as string[])?.length ? (value as string[]).join(", ") : EMPTY),
@@ -161,10 +199,14 @@ const chips = (max?: number): Partial<DataGrid.GridColDef> => ({
 /**
  * Chips shown per mapping code cell before the rest move into the tooltip.
  *
- * Four is about two rows at these column widths, which is the height a row
- * was asked to stay inside.
+ * An upper bound on the count; `MAX_MAPPING_CHIP_LINES` is what actually
+ * holds the row height, since four short codes fit two rows but four long
+ * ones at a narrow column did not.
  */
 const MAX_MAPPING_CHIPS = 4;
+
+/** Rows of chips a mapping code cell may grow to. */
+const MAX_MAPPING_CHIP_LINES = 2;
 
 /** Per-tab columns, headers and widths, in the order they're read left to right. */
 const MASTER_DATA_COLUMNS: Record<MasterDataTab, DataGrid.GridColDef[]> = {
@@ -280,14 +322,14 @@ const MASTER_DATA_COLUMNS: Record<MasterDataTab, DataGrid.GridColDef[]> = {
       headerName: "Engagement Code",
       flex: 2.5,
       minWidth: 180,
-      ...chips(MAX_MAPPING_CHIPS),
+      ...chips(MAX_MAPPING_CHIPS, MAX_MAPPING_CHIP_LINES),
     },
     {
       field: "engagementCodeSuffixes",
       headerName: "Engagement Code Suffix",
       flex: 2.5,
       minWidth: 180,
-      ...chips(MAX_MAPPING_CHIPS),
+      ...chips(MAX_MAPPING_CHIPS, MAX_MAPPING_CHIP_LINES),
     },
     { field: "department", headerName: "Department", flex: 1.5, minWidth: 130, ...text() },
     {
@@ -389,6 +431,7 @@ export default function MasterDataGrid({
   rows,
   loading,
   showSearch = true,
+  pagination,
   onEdit,
   onDelete,
 }: {
@@ -397,6 +440,11 @@ export default function MasterDataGrid({
   loading: boolean;
   /** False where the page puts its own search box above the table. */
   showSearch?: boolean;
+  /**
+   * Server-side paging. Absent — which is every tab but the mappings — means
+   * `rows` is the whole table and the grid pages it itself.
+   */
+  pagination?: MasterDataPagination;
   onEdit: (row: MasterDataRow) => void;
   onDelete: (row: MasterDataRow) => void;
 }) {
@@ -466,9 +514,20 @@ export default function MasterDataGrid({
         localeText={{ toolbarFilters: "Column Search" }}
         initialState={{
           sorting: { sortModel: [{ field: INITIAL_SORT_FIELD[tab], sort: "asc" }] },
-          pagination: { paginationModel: { pageSize: 100, page: 0 } },
+          // Only when the grid owns the paging. Seeding `initialState` for a
+          // model that is also passed as a prop makes the grid complain that
+          // the value is controlled.
+          ...(pagination ? {} : { pagination: { paginationModel: { pageSize: 100, page: 0 } } }),
         }}
         pageSizeOptions={[25, 50, 100]}
+        {...(pagination
+          ? {
+              paginationMode: "server" as const,
+              rowCount: pagination.rowCount,
+              paginationModel: pagination.model,
+              onPaginationModelChange: pagination.onModelChange,
+            }
+          : {})}
         sx={{
           ...FINANCE_GRID_SX,
           // Wrap a long header rather than clipping it — two of these tables
