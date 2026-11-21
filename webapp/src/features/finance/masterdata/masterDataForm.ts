@@ -131,10 +131,13 @@ export function initialFormData(tab: MasterDataTab, row?: MasterDataRow): Master
         engagementCodeSuffixes: r?.engagementCodeSuffixes ?? [],
         invCostTypeId: r?.invCostTypeId ?? 0,
         department: r?.department ?? "",
-        // Same rule as credit cards: lower-cased, and absent when creating.
-        // The column carries "Active" on rows written before this screen
-        // existed, which is why it is normalised rather than compared raw.
-        ...(r ? { status: (r.status ?? MASTER_DATA_STATUS.active).toLowerCase() } : {}),
+        // Present when creating too, unlike the other tabs: the Add form
+        // shows the Active/Inactive toggle, so a mapping can be filed ahead
+        // of the engagement it is for and switched on later. A new one
+        // starts active, which is what the backend did when it hardcoded it.
+        // Lower-cased because the column carries "Active" on rows written
+        // before this screen existed.
+        status: (r?.status ?? MASTER_DATA_STATUS.active).toLowerCase(),
       } satisfies InvoiceAccountMappingPayload;
     }
     case "creditCards": {

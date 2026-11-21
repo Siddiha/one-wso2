@@ -190,6 +190,54 @@ describe("applyInvoiceMappingFilters", () => {
   });
 });
 
+describe("the search box", () => {
+  const find = (term: string) =>
+    applyInvoiceMappingFilters(ROWS, {}, true, term).map((row) => row.id);
+
+  it("leaves every row in when it is blank", () => {
+    expect(find("")).toEqual([1, 2, 3]);
+    expect(find("   ")).toEqual([1, 2, 3]);
+  });
+
+  it("matches the GL code and the account name", () => {
+    expect(find("61033-001")).toEqual([1, 2, 3]);
+    expect(find("Air Ticket")).toEqual([1, 2, 3]);
+  });
+
+  // The codes are how a mapping is looked up in practice, so the search has
+  // to reach into both lists rather than only the plain columns.
+  it("reaches into the engagement codes and the suffixes", () => {
+    expect(find("CS-SUB-IAM")).toEqual([3]);
+    expect(find("ROT")).toEqual([2]);
+  });
+
+  it("matches the cost type, department and internal ID", () => {
+    expect(find("per diem")).toEqual([2]);
+    expect(find("Marketing")).toEqual([2]);
+    expect(find("1001")).toEqual([1, 2, 3]);
+  });
+
+  it("ignores case", () => {
+    expect(find("mkt-gen-rot")).toEqual([2]);
+  });
+
+  // Otherwise typing a second word would widen the result, which reads as
+  // the search getting worse the more you tell it.
+  it("narrows on each word rather than widening", () => {
+    expect(find("Currency Marketing")).toEqual([2]);
+    expect(find("Currency Engineering")).toEqual([]);
+  });
+
+  it("finds nothing for a term no row carries", () => {
+    expect(find("nonexistent")).toEqual([]);
+  });
+
+  // The switch still wins: searching must not surface a retired mapping.
+  it("does not reveal an inactive row", () => {
+    expect(applyInvoiceMappingFilters(ROWS, {}, false, "MKT-GEN-ROT")).toEqual([]);
+  });
+});
+
 describe("countActiveInvoiceMappingFilters", () => {
   it("counts only the filters holding a selection", () => {
     expect(countActiveInvoiceMappingFilters({})).toBe(0);

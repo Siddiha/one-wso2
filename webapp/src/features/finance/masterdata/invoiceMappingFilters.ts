@@ -120,20 +120,53 @@ function keeps(selected: string[] | undefined, held: readonly string[]): boolean
 }
 
 /**
+ * Everything the search box reads, as one lower-cased string.
+ *
+ * The same columns the backend's `searchTerm` covers, so searching here and
+ * searching server-side find the same rows. Deliberately includes the two
+ * code lists: the codes are how a mapping is looked up in practice, and they
+ * are the thing a reader arrives already knowing.
+ */
+function searchableText(row: InvoiceAccountMapping): string {
+  return [
+    row.accountNumber,
+    row.accountClassification,
+    row.internalId,
+    row.costType,
+    row.department ?? "",
+    ...(row.engagementCodes ?? []),
+    ...(row.engagementCodeSuffixes ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+/** Whether a row matches the search box, which is blank most of the time. */
+function matchesSearch(row: InvoiceAccountMapping, search: string): boolean {
+  const term = search.trim().toLowerCase();
+  if (term.length === 0) return true;
+  // Every whitespace-separated word has to appear somewhere in the row, so
+  // "hotel marketing" narrows rather than widening to either one.
+  return term.split(/\s+/).every((word) => searchableText(row).includes(word));
+}
+
+/**
  * The rows left after the filter bar and the Show Inactive switch.
  *
- * `showInactive` is a separate argument rather than another filter key
- * because it is not one: it has a default the others do not, and the switch
- * that drives it lives outside the panel.
+ * `showInactive` and `search` are separate arguments rather than filter keys,
+ * because neither is one: both sit outside the panel, and the panel's Clear
+ * button should not empty a search box the reader can see is still full.
  */
 export function applyInvoiceMappingFilters(
   rows: readonly InvoiceAccountMapping[],
   filter: InvoiceMappingFilter,
   showInactive = false,
+  search = "",
 ): InvoiceAccountMapping[] {
   return rows.filter(
     (row) =>
       (showInactive || isActiveMapping(row)) &&
+      matchesSearch(row, search) &&
       keeps(filter.costTypes, [row.costType]) &&
       keeps(filter.engagementCodes, row.engagementCodes ?? []) &&
       keeps(filter.engagementCodeSuffixes, row.engagementCodeSuffixes ?? []) &&

@@ -61,6 +61,7 @@ export default function MasterDataScreen({
   mappingAutoComplete,
   toolbar,
   children,
+  showGridSearch = true,
 }: {
   tab: MasterDataTab;
   rows: MasterDataRow[];
@@ -76,6 +77,8 @@ export default function MasterDataScreen({
   toolbar?: ReactNode;
   /** Rendered between the header and the table — the expense-type filter bar. */
   children?: ReactNode;
+  /** False where the page puts its own search box above the table. */
+  showGridSearch?: boolean;
 }) {
   // `undefined` = closed. `null` = open for a NEW record. A row = editing it.
   // Three states in one value, because "the add dialog" and "the edit dialog"
@@ -114,6 +117,7 @@ export default function MasterDataScreen({
           tab={tab}
           rows={rows}
           loading={loading}
+          showSearch={showGridSearch}
           onEdit={setFormRow}
           onDelete={setDeleteRow}
         />

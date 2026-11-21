@@ -14,17 +14,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   Collapse,
   FormControlLabel,
+  IconButton,
+  InputAdornment,
   Switch,
+  TextField,
   ToggleButton,
 } from "@wso2/oxygen-ui";
-import { FilterIcon } from "@wso2/oxygen-ui-icons-react";
+import { FilterIcon, SearchIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import InvoiceAccountMappingFilters from "../InvoiceAccountMappingFilters";
 import MasterDataScreen from "../MasterDataScreen";
 import { MASTER_DATA_SNACK } from "../masterDataUiText";
@@ -94,7 +97,10 @@ export default function InvoiceAccountMappingsPage() {
 
   const [showFilters, setShowFilters] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InvoiceMappingFilter>({});
+  // So clearing the box leaves the cursor in it, ready for the next attempt.
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const rows = useMemo(() => query.data?.mappings ?? [], [query.data]);
   const totalCount = query.data?.totalCount ?? 0;
@@ -103,8 +109,8 @@ export default function InvoiceAccountMappingsPage() {
     [rows, autoComplete.data],
   );
   const visibleRows = useMemo(
-    () => applyInvoiceMappingFilters(rows, filter, showInactive),
-    [rows, filter, showInactive],
+    () => applyInvoiceMappingFilters(rows, filter, showInactive, search),
+    [rows, filter, showInactive, search],
   );
   const activeCount = countActiveInvoiceMappingFilters(filter);
 
@@ -123,8 +129,44 @@ export default function InvoiceAccountMappingsPage() {
       costTypes={costTypes.data}
       glCodes={glCodes.data}
       mappingAutoComplete={autoComplete.data}
+      showGridSearch={false}
       toolbar={
         <>
+          {/* Above the table rather than inside the grid's own toolbar, and
+              the same shape as the Autofill Rules search: a reader hunting
+              one engagement code should not have to find the box first. */}
+          <TextField
+            size="small"
+            placeholder="Search mappings"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ width: 260 }}
+            slotProps={{
+              htmlInput: { "aria-label": "Search mappings", ref: searchRef },
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon size={16} />
+                  </InputAdornment>
+                ),
+                endAdornment: search && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      edge="end"
+                      aria-label="Clear search"
+                      onClick={() => {
+                        setSearch("");
+                        searchRef.current?.focus();
+                      }}
+                    >
+                      <XIcon size={14} />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
           <FormControlLabel
             sx={{ mr: 0 }}
             control={
@@ -143,7 +185,7 @@ export default function InvoiceAccountMappingsPage() {
             onChange={() => setShowFilters((v) => !v)}
             // One width for both labels: the toolbar is right-aligned, so a
             // button that resizes on click nudges "Add New" too.
-            sx={{ textTransform: "none", gap: 0.75, px: 1.5, minWidth: 140 }}
+            sx={{ textTransform: "none", gap: 0.75, px: 1.5, minWidth: 140, mr: "auto" }}
           >
             <FilterIcon size={16} />
             {showFilters ? "Hide Filters" : "Show Filters"}

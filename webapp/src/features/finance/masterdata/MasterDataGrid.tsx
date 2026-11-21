@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { useMemo } from "react";
 import { Box, Chip, DataGrid, IconButton, Stack, TextField, Tooltip, Typography } from "@wso2/oxygen-ui";
 import {
   DownloadIcon,
@@ -322,7 +323,7 @@ const MASTER_DATA_COLUMNS: Record<MasterDataTab, DataGrid.GridColDef[]> = {
  * tables are wide, and hiding a column you do not need is worth the extra
  * button.
  */
-function MasterDataToolbar() {
+function MasterDataToolbar({ showSearch = true }: { showSearch?: boolean }) {
   return (
     <DataGrid.Toolbar>
       {/* `Toolbar` is a bare container and takes no `sx`, so the row's
@@ -347,8 +348,10 @@ function MasterDataToolbar() {
         </DataGrid.ExportCsv>
         <Box sx={{ flex: 1 }} />
         {/* `expanded`, so the field is on screen rather than behind a
-            magnifier the reader has to click first. */}
-        <DataGrid.QuickFilter expanded>
+            magnifier the reader has to click first. Hidden on the tabs that
+            put their own search above the table, so there is never a second
+            box that searches the same rows a different way. */}
+        <DataGrid.QuickFilter expanded hidden={!showSearch}>
           <DataGrid.QuickFilterControl
             render={(props) => (
               <TextField
@@ -385,12 +388,15 @@ export default function MasterDataGrid({
   tab,
   rows,
   loading,
+  showSearch = true,
   onEdit,
   onDelete,
 }: {
   tab: MasterDataTab;
   rows: MasterDataRow[];
   loading: boolean;
+  /** False where the page puts its own search box above the table. */
+  showSearch?: boolean;
   onEdit: (row: MasterDataRow) => void;
   onDelete: (row: MasterDataRow) => void;
 }) {
@@ -398,6 +404,16 @@ export default function MasterDataGrid({
   // instead — see `StatusToggle` in MasterDataFormDialog.
   const showsDelete =
     tab !== "creditCards" && tab !== "expenseTypes" && tab !== "invoiceAccountMappings";
+
+  // Closed over rather than passed through `slotProps`, which would need the
+  // grid's ToolbarPropsOverrides augmenting to carry a prop of our own.
+  // Memoised so the toolbar is not a new component type on every render.
+  const toolbar = useMemo(
+    () => function Toolbar() {
+      return <MasterDataToolbar showSearch={showSearch} />;
+    },
+    [showSearch],
+  );
 
   const columns: DataGrid.GridColDef[] = [
     ...MASTER_DATA_COLUMNS[tab],
@@ -446,7 +462,7 @@ export default function MasterDataGrid({
         getRowHeight={() => "auto"}
         disableRowSelectionOnClick
         disableColumnMenu
-        slots={{ toolbar: MasterDataToolbar }}
+        slots={{ toolbar }}
         localeText={{ toolbarFilters: "Column Search" }}
         initialState={{
           sorting: { sortModel: [{ field: INITIAL_SORT_FIELD[tab], sort: "asc" }] },

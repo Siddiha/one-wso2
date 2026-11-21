@@ -26,6 +26,7 @@ import {
   DialogTitle,
   FormControlLabel,
   Switch,
+  Typography,
 } from "@wso2/oxygen-ui";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import { MASTER_DATA_FORM_COPY, MASTER_DATA_SNACK } from "./masterDataUiText";
@@ -65,6 +66,21 @@ import {
   type MasterDataTab,
   type SubsidiaryPayload,
 } from "./masterDataTypes";
+
+/**
+ * The mapping form, one field per row.
+ *
+ * Read top to bottom like the other four tabs, but kept short enough to sit
+ * on screen whole: no field is allowed to grow, the account details are one
+ * line rather than three boxes, and the two rules about the code fields are
+ * one line rather than two alerts. Scrolling a form to reach the
+ * Active/Inactive toggle is how that toggle came to be missed.
+ */
+const MAPPING_FORM_SX = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  rowGap: 0.5,
+} as const;
 
 /**
  * Add / edit, for every tab.
@@ -178,7 +194,11 @@ export default function MasterDataFormDialog({
       <DialogTitle id="master-data-form-title">
         {isCreate ? copy.addTitle : copy.editTitle}
       </DialogTitle>
-      <DialogContent dividers>
+      {/* No scrollbar: the form above is laid out to fit, and a form that
+          has to be scrolled is how the status toggle came to be missed in
+          the first place. `visible` on small screens would clip, so the
+          overflow only gives way below the height the layout assumes. */}
+      <DialogContent dividers sx={{ overflowY: "auto" }}>
         <Fields
           tab={tab}
           form={form}
@@ -386,15 +406,15 @@ function Fields({
       // The mapping stores the NetSuite account's number, name and internal
       // ID as three loose columns, and all three come from one row of the GL
       // code table. So they are reported by a single GL Code picker rather
-      // than typed into three boxes that can disagree with each other — and
-      // with NetSuite — one character at a time.
-      // Labelled with the code and the account name, not the code alone: the
-      // Autocomplete filters on the label, and someone adding a mapping knows
-      // "the sponsorship account" far more often than its number. The table
-      // itself still leads with the code, which is the unique half.
+      // than typed into three boxes that can disagree with each other, and
+      // with NetSuite, one character at a time.
+      //
+      // Labelled with the code and the account name, because the
+      // Autocomplete filters on the label and someone adding a mapping knows
+      // "the sponsorship account" more often than its number.
       const glCodeOptions = (glCodes ?? []).map((g) => ({
         id: g.id,
-        label: g.glAccountName ? `${g.glCode} — ${g.glAccountName}` : g.glCode,
+        label: g.glAccountName ? `${g.glCode} \u2014 ${g.glAccountName}` : g.glCode,
       }));
       // Resolved back out of the stored account number rather than kept as
       // its own state, so there is one source of truth and an existing row
@@ -404,8 +424,7 @@ function Fields({
       const pickedGlCode = (glCodes ?? []).find((g) => g.glCode === f.accountNumber);
       // A row written before this picker existed can carry an account number
       // that matches no GL code. Its stored values are still shown and the
-      // rest of the row stays editable; saying so is better than an empty
-      // picker above three filled boxes with no explanation.
+      // rest of the row stays editable.
       const unmatchedAccount = !pickedGlCode && f.accountNumber.trim().length > 0;
 
       const applyGlCode = (glCodeId: number) => {
@@ -418,27 +437,22 @@ function Fields({
           accountNumber: picked.glCode,
           accountClassification: picked.glAccountName,
           internalId: String(picked.internalId),
-          // `costCenter` is the GL code table's own `department` column — the
-          // backend serves that column under this name. It seeds the field
-          // below rather than replacing it, since a mapping may be filed
-          // under a different department than its account's default.
+          // `costCenter` is the GL code table's own `department` column. It
+          // seeds the field below rather than replacing it, since a mapping
+          // may be filed under a different department than its account.
           department: picked.costCenter ?? "",
         });
       };
 
-      // Flagged here rather than on the chips themselves: a rejected value is
-      // about the pair of lists, and naming the offending codes back is more
-      // use than reddening a field that already looks filled in.
       const badCodes = invalidEngagementCodes(f);
       return (
-        <>
+        <Box sx={MAPPING_FORM_SX}>
           <IdSelectInput
             id="invCostTypeId"
             label="Cost Type"
             value={f.invCostTypeId}
             options={costTypeOptions}
             required
-            helperText="What is being billed — e.g. Air Ticket, Hotel, or Currency for per diem"
             onChange={set}
           />
           <IdSelectInput
@@ -447,87 +461,72 @@ function Fields({
             value={pickedGlCode?.id ?? 0}
             options={glCodeOptions}
             required
-            helperText="The NetSuite account this posts to, by its code — e.g. 61033-003"
             onChange={(_id, value) => applyGlCode(value)}
           />
-          {unmatchedAccount && (
-            <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
-              This mapping's account is not one of the GL codes on file, so the GL Code box above
-              is empty. Its stored values are shown below and everything else on this form can
-              still be edited — picking a GL Code will replace them.
-            </Alert>
+
+          {/* The account the GL Code resolves to, on one line. These are not
+              inputs any more, they are confirmation of what the picker just
+              filled in, and three full-width boxes of them were most of the
+              reason this form had to be scrolled. */}
+          {f.accountNumber.trim().length > 0 && (
+            <Box sx={{ px: 1.5, py: 0.75, borderRadius: 1, bgcolor: "action.hover" }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                {f.accountClassification || "\u2014"}
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+                Account {f.accountNumber}
+                {f.internalId ? ` \u00b7 NetSuite internal ID ${f.internalId}` : ""}
+                {unmatchedAccount ? " \u00b7 not one of the GL codes on file" : ""}
+              </Typography>
+            </Box>
           )}
-          {/* Read-only: all three are filled in by the GL Account above. */}
-          <TextInput
-            id="accountClassification"
-            label="Account Classification"
-            value={f.accountClassification}
-            required
-            disabled
-            helperText="The GL account's name in NetSuite"
-            onChange={() => {}}
-          />
-          <TextInput
-            id="accountNumber"
-            label="Account Number"
-            value={f.accountNumber}
-            required
-            disabled
-            onChange={() => {}}
-          />
-          <TextInput
-            id="internalId"
-            label="NetSuite Internal ID"
-            value={f.internalId}
-            required
-            disabled
-            onChange={() => {}}
-          />
-          <SelectInput
-            id="department"
-            label="Department"
-            value={f.department}
-            options={mappingAutoComplete?.departments ?? []}
-            required={false}
-            freeSolo
-            helperText="Seeded from the GL Code. Leave blank for an Intercompany mapping."
-            onChange={set}
-          />
-          {/* Boxed together under a warning line for the same reason the
-              expense-type pair is: the rule binding these two fields is not
-              visible from either one on its own. */}
-          <Alert severity="warning" variant="outlined" sx={{ mt: 2, mb: 1 }}>
-            Please fill in at least one of the following fields
-          </Alert>
-          <Box sx={{ pl: 0.5 }}>
-            <MultiSelectInput
-              id="engagementCodes"
-              label="Engagement Codes"
-              values={f.engagementCodes}
-              options={mappingAutoComplete?.engagementCodes ?? []}
+
+          <Box>
+            <SelectInput
+              id="department"
+              label="Department"
+              value={f.department}
+              options={mappingAutoComplete?.departments ?? []}
               required={false}
-              helperText="Pick a code already in use, or type a new one and press Enter"
-              onChange={set}
-            />
-            <MultiSelectInput
-              id="engagementCodeSuffixes"
-              label="Engagement Code Suffixes"
-              values={f.engagementCodeSuffixes}
-              options={mappingAutoComplete?.engagementCodeSuffixes ?? []}
-              required={false}
-              helperText="Matches any engagement code ending in this. Type and press Enter"
+              freeSolo
               onChange={set}
             />
           </Box>
-          {/* Info, not an error: nothing has gone wrong until one of these
-              is actually typed, and the format is worth reading beforehand. */}
-          <Alert severity={badCodes.length > 0 ? "warning" : "info"} variant="outlined" sx={{ mt: 1 }}>
+
+          <MultiSelectInput
+            id="engagementCodes"
+            label="Engagement Codes"
+            values={f.engagementCodes}
+            options={mappingAutoComplete?.engagementCodes ?? []}
+            required={false}
+            helperText=""
+            onChange={set}
+          />
+          <MultiSelectInput
+            id="engagementCodeSuffixes"
+            label="Engagement Code Suffixes"
+            values={f.engagementCodeSuffixes}
+            options={mappingAutoComplete?.engagementCodeSuffixes ?? []}
+            required={false}
+            helperText=""
+            onChange={set}
+          />
+
+          {/* One line in place of two Alert boxes. Both rules are about the
+              pair of fields above, and two bordered boxes to say so cost
+              more height than the fields they were explaining. */}
+          <Typography
+            sx={{
+              fontSize: 12,
+              lineHeight: 1.45,
+              color: badCodes.length > 0 ? "error.main" : "text.secondary",
+            }}
+          >
             {badCodes.length > 0
-              ? "These cannot be saved as typed — use letters, digits, hyphens, dots or " +
-                `underscores only, one code per entry: ${badCodes.join(" \u00b7 ")}`
-              : "Codes may use letters, digits, hyphens, dots and underscores, one code per entry."}
-          </Alert>
-        </>
+              ? `Cannot be saved as typed: ${badCodes.join(" \u00b7 ")}. Use letters, digits, hyphens, dots or underscores only, one code per entry.`
+              : "Fill in at least one of the two fields above. Type a value and press Enter to add it."}
+          </Typography>
+        </Box>
       );
     }
 

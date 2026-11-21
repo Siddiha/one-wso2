@@ -464,9 +464,13 @@ describe("initialFormData — invoice account mappings", () => {
     });
   });
 
-  it("seeds no status at all when creating", () => {
+  // Unlike the other tabs, this form carries a status while creating: the
+  // Add dialog shows the Active/Inactive toggle, so a mapping can be filed
+  // ahead of the engagement it is for. It starts active, which is what the
+  // backend did when it hardcoded the value.
+  it("seeds an active status when creating, so the toggle has something to show", () => {
     const form = initialFormData("invoiceAccountMappings") as InvoiceAccountMappingPayload;
-    expect(form.status).toBeUndefined();
+    expect(form.status).toBe("active");
     expect(form.invCostTypeId).toBe(0);
   });
 
