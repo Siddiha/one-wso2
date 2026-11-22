@@ -489,6 +489,7 @@ function Fields({
               options={mappingAutoComplete?.departments ?? []}
               required={false}
               freeSolo
+              placeholder="e.g. Cost of Sales"
               onChange={set}
             />
           </Box>

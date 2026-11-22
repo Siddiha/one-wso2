@@ -40,13 +40,18 @@ export const MASTER_DATA_ENDPOINTS: Record<MasterDataTab, string> = {
   invoiceAccountMappings: "invoice-account-mappings",
 };
 
-/** Page/tab titles. */
+/**
+ * Page/tab titles.
+ *
+ * The mappings heading is longer than its side menu entry on purpose: the
+ * menu entry was clipped and had to be shortened, the heading has the room.
+ */
 export const MASTER_DATA_LABELS: Record<MasterDataTab, string> = {
   subsidiaries: "Subsidiaries",
   departments: "Departments",
   expenseTypes: "Expense Types",
   creditCards: "Credit Cards",
-  invoiceAccountMappings: "Invoice Accounts",
+  invoiceAccountMappings: "Invoice Account Mappings",
 };
 
 // ---- Subsidiaries ---------------------------------------------------------

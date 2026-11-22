@@ -119,6 +119,7 @@ export function SelectInput({
   required,
   freeSolo = false,
   helperText,
+  placeholder,
   onChange,
 }: {
   id: string;
@@ -129,6 +130,9 @@ export function SelectInput({
   freeSolo?: boolean;
   /** A sample value, or a note on what the list is. */
   helperText?: string;
+  /** A sample value shown inside an empty field, where a line of helper text
+      below it would cost height the form does not have. */
+  placeholder?: string;
   onChange: (id: string, value: string) => void;
 }) {
   const [touched, setTouched] = useState(false);
@@ -152,6 +156,7 @@ export function SelectInput({
           {...FIELD_PROPS}
           label={label}
           required={required}
+          placeholder={placeholder}
           helperText={helperText}
           error={required && touched && !value}
         />
