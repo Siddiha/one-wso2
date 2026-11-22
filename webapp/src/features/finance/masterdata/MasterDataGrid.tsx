@@ -365,7 +365,13 @@ const MASTER_DATA_COLUMNS: Record<MasterDataTab, DataGrid.GridColDef[]> = {
  * tables are wide, and hiding a column you do not need is worth the extra
  * button.
  */
-function MasterDataToolbar({ showSearch = true }: { showSearch?: boolean }) {
+function MasterDataToolbar({
+  showSearch = true,
+  showColumnSearch = true,
+}: {
+  showSearch?: boolean;
+  showColumnSearch?: boolean;
+}) {
   return (
     <DataGrid.Toolbar>
       {/* `Toolbar` is a bare container and takes no `sx`, so the row's
@@ -380,10 +386,12 @@ function MasterDataToolbar({ showSearch = true }: { showSearch?: boolean }) {
           "& .MuiButtonBase-root": { color: "text.secondary" },
         }}
       >
-        <DataGrid.FilterPanelTrigger render={<DataGrid.ToolbarButton />}>
-          <ListFilterIcon size={16} style={{ marginRight: 6 }} />
-          Column Search
-        </DataGrid.FilterPanelTrigger>
+        {showColumnSearch && (
+          <DataGrid.FilterPanelTrigger render={<DataGrid.ToolbarButton />}>
+            <ListFilterIcon size={16} style={{ marginRight: 6 }} />
+            Column Search
+          </DataGrid.FilterPanelTrigger>
+        )}
         <DataGrid.ExportCsv render={<DataGrid.ToolbarButton />}>
           <DownloadIcon size={16} style={{ marginRight: 6 }} />
           Export
@@ -456,11 +464,14 @@ export default function MasterDataGrid({
   // Closed over rather than passed through `slotProps`, which would need the
   // grid's ToolbarPropsOverrides augmenting to carry a prop of our own.
   // Memoised so the toolbar is not a new component type on every render.
+  // Column Search narrows the rows the grid holds, which on a server-paged
+  // tab is one page, so it is left off there.
+  const showColumnSearch = pagination === undefined;
   const toolbar = useMemo(
     () => function Toolbar() {
-      return <MasterDataToolbar showSearch={showSearch} />;
+      return <MasterDataToolbar showSearch={showSearch} showColumnSearch={showColumnSearch} />;
     },
-    [showSearch],
+    [showSearch, showColumnSearch],
   );
 
   const columns: DataGrid.GridColDef[] = [
@@ -512,13 +523,14 @@ export default function MasterDataGrid({
         disableColumnMenu
         slots={{ toolbar }}
         localeText={{ toolbarFilters: "Column Search" }}
-        initialState={{
-          sorting: { sortModel: [{ field: INITIAL_SORT_FIELD[tab], sort: "asc" }] },
-          // Only when the grid owns the paging. Seeding `initialState` for a
-          // model that is also passed as a prop makes the grid complain that
-          // the value is controlled.
-          ...(pagination ? {} : { pagination: { paginationModel: { pageSize: 100, page: 0 } } }),
-        }}
+        // A server-paged tab takes its order and its page from the request,
+        // so the grid is seeded with neither.
+        initialState={pagination
+          ? {}
+          : {
+              sorting: { sortModel: [{ field: INITIAL_SORT_FIELD[tab], sort: "asc" }] },
+              pagination: { paginationModel: { pageSize: 100, page: 0 } },
+            }}
         pageSizeOptions={[25, 50, 100]}
         {...(pagination
           ? {
@@ -526,6 +538,11 @@ export default function MasterDataGrid({
               rowCount: pagination.rowCount,
               paginationModel: pagination.model,
               onPaginationModelChange: pagination.onModelChange,
+              // The request carries no sort or filter model, so these would
+              // reorder or narrow the page on screen while reading as though
+              // they covered every match.
+              disableColumnSorting: true,
+              disableColumnFilter: true,
             }
           : {})}
         sx={{

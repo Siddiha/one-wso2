@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAsgardeo } from "@asgardeo/react";
 import { authedGet, authedPost } from "@api/http";
 import { useAccessToken } from "@hooks/useAccessToken";
@@ -285,6 +285,10 @@ export function useInvoiceAccountMappings(filters: InvoiceAccountMappingFilter =
       );
       return page ?? { mappings: [], totalCount: 0 };
     },
+    // Hold the last page on screen while the next one loads. Without it an
+    // uncached page renders a totalCount of 0, and a grid with no page count
+    // moves back to page one, which then answers the request.
+    placeholderData: keepPreviousData,
     staleTime: REFERENCE_STALE_TIME,
     retry: financeRetry,
   });
