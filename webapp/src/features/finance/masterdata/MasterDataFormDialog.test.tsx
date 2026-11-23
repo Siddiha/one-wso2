@@ -212,7 +212,7 @@ function showMapping(row?: MasterDataRow) {
             engagementCodes: ["MKT-EVT-IND"],
             engagementCodeSuffixes: ["MKT-EVT"],
             departments: ["Marketing"],
-            costTypes: ["Air Ticket"],
+            costTypes: [{ id: 1, label: "Air Ticket" }],
           }}
           onClose={vi.fn()}
         />
