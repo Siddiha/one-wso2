@@ -73,8 +73,7 @@ import {
  * Read top to bottom like the other four tabs, but kept short enough to sit
  * on screen whole: no field is allowed to grow, the account details are one
  * line rather than three boxes, and the two rules about the code fields are
- * one line rather than two alerts. Scrolling a form to reach the
- * Active/Inactive toggle is how that toggle came to be missed.
+ * one line rather than two alerts.
  */
 const MAPPING_FORM_SX = {
   display: "grid",
@@ -116,7 +115,7 @@ export default function MasterDataFormDialog({
   employeeEmails?: string[];
   /** Invoice-account-mapping form's Cost Type dropdown. */
   costTypes?: InvoiceCostType[];
-  /** Invoice-account-mapping form's engagement code / department option lists. */
+  /** Invoice-account-mapping form's engagement code and suffix option lists. */
   mappingAutoComplete?: InvoiceAccountMappingAutoComplete;
   onClose: () => void;
 }) {
@@ -414,7 +413,7 @@ function Fields({
       // "the sponsorship account" more often than its number.
       const glCodeOptions = (glCodes ?? []).map((g) => ({
         id: g.id,
-        label: g.glAccountName ? `${g.glCode} \u2014 ${g.glAccountName}` : g.glCode,
+        label: g.glAccountName ? `${g.glCode} - ${g.glAccountName}` : g.glCode,
       }));
       // Resolved back out of the stored account number rather than kept as
       // its own state, so there is one source of truth and an existing row
@@ -430,19 +429,27 @@ function Fields({
       const applyGlCode = (glCodeId: number) => {
         const picked = (glCodes ?? []).find((g) => g.id === glCodeId);
         if (!picked) {
-          setMany({ accountNumber: "", accountClassification: "", internalId: "" });
+          setMany({ accountNumber: "", accountClassification: "", internalId: "", department: "" });
           return;
         }
         setMany({
           accountNumber: picked.glCode,
           accountClassification: picked.glAccountName,
           internalId: String(picked.internalId),
-          // `costCenter` is the GL code table's own `department` column. It
-          // seeds the field below rather than replacing it, since a mapping
-          // may be filed under a different department than its account.
+          // `costCenter` is the GL code table's own `department` column, and
+          // it is the whole of what the Department field below shows.
           department: picked.costCenter ?? "",
         });
       };
+
+      // Some GL codes carry no department, and a blank one is a real value
+      // on this table rather than a gap, so an empty box has to read as an
+      // answer instead of an unfilled field.
+      const departmentHelp = !f.department
+        ? pickedGlCode
+          ? "This GL code has no department."
+          : "Filled in from the GL code."
+        : undefined;
 
       const badCodes = invalidEngagementCodes(f);
       return (
@@ -471,7 +478,7 @@ function Fields({
           {f.accountNumber.trim().length > 0 && (
             <Box sx={{ px: 1.5, py: 0.75, borderRadius: 1, bgcolor: "action.hover" }}>
               <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
-                {f.accountClassification || "\u2014"}
+                {f.accountClassification || "-"}
               </Typography>
               <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
                 Account {f.accountNumber}
@@ -481,18 +488,20 @@ function Fields({
             </Box>
           )}
 
-          <Box>
-            <SelectInput
-              id="department"
-              label="Department"
-              value={f.department}
-              options={mappingAutoComplete?.departments ?? []}
-              required={false}
-              freeSolo
-              placeholder="e.g. Cost of Sales"
-              onChange={set}
-            />
-          </Box>
+          {/* Filled in by the GL Code picker above rather than typed. The
+              department a mapping posts to is a property of the NetSuite
+              account, so one entered here by hand could only disagree with
+              it. Still shown, because it is stored on the mapping and read
+              back in the table's Department column. */}
+          <TextInput
+            id="department"
+            label="Department"
+            value={f.department}
+            required={false}
+            disabled
+            helperText={departmentHelp}
+            onChange={() => {}}
+          />
 
           <MultiSelectInput
             id="engagementCodes"
@@ -583,10 +592,10 @@ function Fields({
 }
 
 /**
- * Active / inactive, for the two tabs that retire a record by status.
+ * Active / inactive, for the three tabs that retire a record by status.
  *
- * Renders nothing while creating — `value` is absent in exactly that case,
- * the status being no part of either Add payload. See `initialFormData`.
+ * Renders nothing while creating: `value` is absent in exactly that case,
+ * the status being no part of any Add payload. See `initialFormData`.
  *
  * Either direction can be refused with a 409: retiring an expense type that
  * active claims still carry, and reactivating one whose Gl code is inactive.

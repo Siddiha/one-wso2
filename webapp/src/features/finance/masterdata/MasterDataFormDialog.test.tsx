@@ -20,7 +20,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import MasterDataFormDialog from "./MasterDataFormDialog";
 import { NotificationsProvider } from "@context/notifications/NotificationsContext";
-import type { CreditCard, MasterDataRow } from "./masterDataTypes";
+import type { CreditCard, GlCode, MasterDataRow } from "./masterDataTypes";
 
 vi.mock("./useMasterDataMutations", () => ({
   useCreateMasterData: () => ({ mutate: vi.fn(), isPending: false }),
@@ -169,5 +169,120 @@ describe("the subsidiary form's country", () => {
   it("does not let that currency be typed over", () => {
     showSubsidiaries();
     expect(screen.getByLabelText(/Currency Code/)).toBeDisabled();
+  });
+});
+
+const GL_CODES: GlCode[] = [
+  {
+    id: 7,
+    internalId: 1335,
+    glCode: "61023-003",
+    glAccountName: "Discretionary Marketing : Events Travel",
+    costCenter: "Marketing",
+  },
+  // A GL code with no department of its own. Blank is a real value on this
+  // table, so the form has to say so rather than look unfilled.
+  { id: 8, internalId: 1400, glCode: "16001-001", glAccountName: "Intercompany", costCenter: null },
+];
+
+const mapping = {
+  id: 91,
+  internalId: "1335",
+  accountNumber: "61023-003",
+  accountClassification: "Discretionary Marketing : Events Travel",
+  engagementCodes: ["MKT-EVT-IND"],
+  engagementCodeSuffixes: [],
+  invCostTypeId: 1,
+  costType: "Air Ticket",
+  department: "Marketing",
+  status: "Active",
+} as unknown as MasterDataRow;
+
+function showMapping(row?: MasterDataRow) {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <NotificationsProvider>
+        <MasterDataFormDialog
+          tab="invoiceAccountMappings"
+          open
+          row={row}
+          glCodes={GL_CODES}
+          costTypes={[{ id: 1, name: "Air Ticket" }]}
+          mappingAutoComplete={{
+            engagementCodes: ["MKT-EVT-IND"],
+            engagementCodeSuffixes: ["MKT-EVT"],
+            departments: ["Marketing"],
+            costTypes: ["Air Ticket"],
+          }}
+          onClose={vi.fn()}
+        />
+      </NotificationsProvider>
+    </QueryClientProvider>,
+  );
+}
+
+describe("the invoice account mapping form's department", () => {
+  it("takes it from the GL code rather than from the reader", async () => {
+    const user = userEvent.setup();
+    showMapping();
+
+    expect(screen.getByLabelText(/Department/)).toHaveValue("");
+
+    await user.click(screen.getByRole("combobox", { name: /GL Code/ }));
+    await user.click(
+      await screen.findByRole("option", { name: "61023-003 - Discretionary Marketing : Events Travel" }),
+    );
+
+    expect(screen.getByLabelText(/Department/)).toHaveValue("Marketing");
+  });
+
+  it("does not let it be typed over", () => {
+    showMapping();
+    expect(screen.getByLabelText(/Department/)).toBeDisabled();
+  });
+
+  // Picking a second GL code has to replace the first one's department, not
+  // leave it behind on an account it has nothing to do with.
+  it("replaces it on a new GL code, and says so when that one carries none", async () => {
+    const user = userEvent.setup();
+    showMapping();
+
+    await user.click(screen.getByRole("combobox", { name: /GL Code/ }));
+    await user.click(
+      await screen.findByRole("option", { name: "61023-003 - Discretionary Marketing : Events Travel" }),
+    );
+    await user.click(screen.getByRole("combobox", { name: /GL Code/ }));
+    await user.click(await screen.findByRole("option", { name: "16001-001 - Intercompany" }));
+
+    expect(screen.getByLabelText(/Department/)).toHaveValue("");
+    expect(screen.getByText("This GL code has no department.")).toBeInTheDocument();
+  });
+
+  // An em dash reads as a word break rather than a separator at this size,
+  // and the account names themselves already contain punctuation.
+  it("separates a GL code from its account name with a plain dash", async () => {
+    const user = userEvent.setup();
+    showMapping();
+
+    await user.click(screen.getByRole("combobox", { name: /GL Code/ }));
+
+    const option = await screen.findByRole("option", { name: /^61023-003/ });
+    expect(option.textContent).toContain("61023-003 - Discretionary Marketing");
+    expect(option.textContent).not.toContain("\u2014");
+  });
+});
+
+describe("the invoice account mapping form's status toggle", () => {
+  // Nothing is ever filed inactive, so the backend stores a create active and
+  // the Add form has no toggle to get wrong.
+  it("offers none when creating", () => {
+    showMapping();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
+  it("still offers one when editing, which is how a mapping is retired", () => {
+    showMapping(mapping);
+    expect(screen.getByRole("switch")).toBeChecked();
+    expect(screen.getByText("Active")).toBeInTheDocument();
   });
 });

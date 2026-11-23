@@ -42,7 +42,7 @@ const FILTER_GRID_SX = {
  * One row of chips, however many are selected.
  *
  * A multi-select grows a row taller per chip by default, which on four
- * filters side by side pushes the table off the screen — and the box that
+ * filters side by side pushes the table off the screen, and the box that
  * grew is the one you are least likely to be reading. So the row stays one
  * line high and the chips past the first few become a `+n`.
  *
@@ -50,11 +50,37 @@ const FILTER_GRID_SX = {
  * are positioned over the right-hand end of this row, so a row that scrolled
  * would carry them out of reach. Everything selected is readable in the
  * dropdown, which lists it first and ticked, and in this row's tooltip.
+ *
+ * The row has to stop before those two buttons rather than run under them,
+ * which takes both constants below: the field keeps room for them at its
+ * end, and the chips sit in a box that is clipped at the edge of that room.
+ * `overflow` on the field itself would not do, because it clips at the
+ * padding edge, which is past the buttons rather than before them.
  */
+
+/** Room kept at the end of a filter box for its clear and dropdown buttons. */
+const END_BUTTONS_WIDTH = 60;
+
 const FIELD_SX = {
   minWidth: 0,
-  "& .MuiAutocomplete-inputRoot": { flexWrap: "nowrap", overflow: "hidden" },
+  "& .MuiAutocomplete-inputRoot": {
+    flexWrap: "nowrap",
+    paddingRight: `${END_BUTTONS_WIDTH}px !important`,
+  },
   "& .MuiAutocomplete-tag": { flexShrink: 0, maxWidth: 120 },
+  // Always on, not only while the pointer is over the field: clearing the
+  // box in one go is what replaced the per-chip delete icons, so it cannot
+  // be something you have to hover to find.
+  "& .MuiAutocomplete-clearIndicator": { visibility: "visible" },
+} as const;
+
+/** The box holding the chips, which is what cuts the row off. */
+const TAGS_SX = {
+  display: "flex",
+  alignItems: "center",
+  gap: 0.5,
+  minWidth: 0,
+  overflow: "hidden",
 } as const;
 
 /** Chips a filter box shows before the rest become a `+n`. */
@@ -96,18 +122,26 @@ function StringFilter({
       renderTags={(tags, getTagProps) => {
         const shown = tags.slice(0, MAX_FILTER_CHIPS);
         const hiddenCount = tags.length - shown.length;
-        return [
-          ...shown.map((tag, index) => (
-            <Chip {...getTagProps({ index })} key={tag} label={tag} size="small" />
-          )),
-          // Not deletable, and not one of the tags: it stands for the rest of
-          // them, so there is nothing for an `x` on it to remove.
-          hiddenCount > 0 ? (
-            <Tooltip key="more" arrow title={tags.join(", ")}>
-              <Chip label={`+${hiddenCount}`} size="small" variant="outlined" />
-            </Tooltip>
-          ) : null,
-        ];
+        return (
+          <Box sx={TAGS_SX}>
+            {shown.map((tag, index) => {
+              const { key, ...tagProps } = getTagProps({ index });
+              // No delete icon per chip. Only the first few are on screen,
+              // so clearing one at a time from here could never reach the
+              // rest, and the icons crowd out the labels that are. The row
+              // clears in one go with the button at its end, or a value at
+              // a time by unticking it in the dropdown.
+              return (
+                <Chip {...tagProps} key={key} label={tag} size="small" onDelete={undefined} />
+              );
+            })}
+            {hiddenCount > 0 && (
+              <Tooltip arrow title={tags.join(", ")}>
+                <Chip label={`+${hiddenCount}`} size="small" variant="outlined" />
+              </Tooltip>
+            )}
+          </Box>
+        );
       }}
       // A tick, because with the selected options lifted to the top of the
       // list there is otherwise nothing saying why they are up there.
