@@ -31,6 +31,36 @@ const STICKY_SX = {
   whiteSpace: "nowrap",
 } as const;
 
+/** The theme's row shade, the one the footer totals row is tinted with. */
+const HOVER_TINT = "var(--oxygen-palette-action-hover)";
+
+/**
+ * A pinned cell's geometry, plus a background with no transparency left in
+ * it, so the month columns cannot be read through the cell as they scroll
+ * underneath it.
+ *
+ * `action.hover` is translucent in every theme and `background.paper` is in
+ * several, so painting a pinned cell with either leaves it see-through. A
+ * background COLOUR cannot settle it here either: the footer row shades its
+ * cells through a `& td` rule, and that outranks a cell's own class on
+ * `background-color`. The shades are therefore stacked as background IMAGES,
+ * which nothing else sets, over an opaque page colour at the bottom of the
+ * stack — leaving it opaque whatever colour wins underneath.
+ *
+ * @param tints - Shades to composite on top, nearest the viewer first.
+ */
+const opaqueSticky = (...tints: readonly string[]) => ({
+  ...STICKY_SX,
+  backgroundImage: [
+    ...tints,
+    "var(--oxygen-palette-background-paper)",
+    // Last, so it sits at the bottom: opaque, and not another tint.
+    "var(--oxygen-palette-background-default)",
+  ]
+    .map((layer) => `linear-gradient(${layer}, ${layer})`)
+    .join(", "),
+});
+
 /** One row per expense category, one column per month, with trailing Total and
  *  % columns and a per-month totals row underneath. */
 export function ExpenseMonthlyBreakdownTable({
@@ -56,7 +86,7 @@ export function ExpenseMonthlyBreakdownTable({
     <Table size="small">
       <TableHead>
         <TableRow sx={HEAD_SX}>
-          <TableCell sx={{ ...STICKY_SX, bgcolor: "background.paper" }}>Category</TableCell>
+          <TableCell sx={opaqueSticky()}>Category</TableCell>
           {items.map((item) => (
             <TableCell key={item.month} align="right" sx={{ whiteSpace: "nowrap" }}>
               {item.label}
@@ -69,9 +99,7 @@ export function ExpenseMonthlyBreakdownTable({
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.expenseType}>
-            <TableCell sx={{ ...CELL_SX, ...STICKY_SX, bgcolor: "background.paper" }}>
-              {row.expenseType}
-            </TableCell>
+            <TableCell sx={{ ...CELL_SX, ...opaqueSticky() }}>{row.expenseType}</TableCell>
             {row.amountsByMonth.map((amount, index) => (
               <TableCell key={items[index].month} align="right" sx={CELL_SX}>
                 {money(amount, currency)}
@@ -86,7 +114,7 @@ export function ExpenseMonthlyBreakdownTable({
           </TableRow>
         ))}
         <TableRow sx={{ "& td": { fontWeight: 700, border: 0, bgcolor: "action.hover" } }}>
-          <TableCell sx={{ ...CELL_SX, ...STICKY_SX }}>Total</TableCell>
+          <TableCell sx={{ ...CELL_SX, ...opaqueSticky(HOVER_TINT) }}>Total</TableCell>
           {monthTotals.map((total, index) => (
             <TableCell key={items[index].month} align="right" sx={CELL_SX}>
               {money(total, currency)}
