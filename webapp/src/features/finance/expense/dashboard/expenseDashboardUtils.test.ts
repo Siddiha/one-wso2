@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ALL_CATEGORIES,
   formatPercentage,
+  getCategoryBreakdown,
   getCategoryOptions,
   getEmployeeOptions,
   getEntityCodeForLabel,
@@ -29,6 +30,7 @@ import {
 import type {
   ExpenseEmployee,
   ExpenseReportEmployeeOption,
+  ExpenseReportMonthlyItem,
   ExpenseSubsidiarySummary,
   ExpenseTypeData,
 } from "../expenseTypes";
@@ -272,5 +274,110 @@ describe("getEmployeeOptions", () => {
 
   it("has nothing to offer without a directory or a report", () => {
     expect(getEmployeeOptions([], [])).toEqual([]);
+  });
+});
+
+describe("getCategoryBreakdown", () => {
+  const month = (
+    label: string,
+    total: number,
+    amounts: { expenseType: string; amount: number }[],
+  ): ExpenseReportMonthlyItem => ({
+    month: label,
+    label,
+    amounts,
+    total,
+    // Nil because nothing here reads it: the share these tests check is the
+    // category's, which this helper computes rather than carries.
+    percentageOfTotal: 0,
+  });
+
+  const twoMonths = [
+    month("Jul 2026", 1000, [
+      { expenseType: "Travel", amount: 600 },
+      { expenseType: "Meals", amount: 400 },
+    ]),
+    month("Aug 2026", 1000, [
+      { expenseType: "Travel", amount: 150 },
+      { expenseType: "Meals", amount: 850 },
+    ]),
+  ];
+
+  it("gives each category a row holding one amount per month", () => {
+    const { rows } = getCategoryBreakdown(["Travel", "Meals"], twoMonths);
+
+    expect(rows).toEqual([
+      { expenseType: "Travel", amountsByMonth: [600, 150], total: 750, percentageOfTotal: 37.5 },
+      { expenseType: "Meals", amountsByMonth: [400, 850], total: 1250, percentageOfTotal: 62.5 },
+    ]);
+  });
+
+  it("totals each month and the period", () => {
+    const { monthTotals, periodTotal } = getCategoryBreakdown(["Travel", "Meals"], twoMonths);
+
+    expect(monthTotals).toEqual([1000, 1000]);
+    expect(periodTotal).toBe(2000);
+  });
+
+  // The rows and the footer are two readings of one period, so a reader adding
+  // either axis has to arrive at the same number.
+  it("reconciles the row totals against the month totals", () => {
+    const { rows, monthTotals, periodTotal } = getCategoryBreakdown(["Travel", "Meals"], twoMonths);
+
+    expect(rows.reduce((sum, row) => sum + row.total, 0)).toBe(periodTotal);
+    expect(monthTotals.reduce((sum, total) => sum + total, 0)).toBe(periodTotal);
+  });
+
+  // A month that reports no amount for a category leaves a hole, and reading
+  // by position rather than by name would pull the next month's figure into it.
+  it("reads a month's amounts by name, so a missing category stays at zero", () => {
+    const { rows } = getCategoryBreakdown(
+      ["Travel", "Meals"],
+      [month("Jul 2026", 400, [{ expenseType: "Meals", amount: 400 }])],
+    );
+
+    expect(rows[0]).toEqual({
+      expenseType: "Travel",
+      amountsByMonth: [0],
+      total: 0,
+      percentageOfTotal: 0,
+    });
+    expect(rows[1].amountsByMonth).toEqual([400]);
+  });
+
+  it("rounds a category's share to one decimal", () => {
+    const { rows } = getCategoryBreakdown(
+      ["Travel", "Meals", "Taxi"],
+      [
+        month("Jul 2026", 3, [
+          { expenseType: "Travel", amount: 1 },
+          { expenseType: "Meals", amount: 1 },
+          { expenseType: "Taxi", amount: 1 },
+        ]),
+      ],
+    );
+
+    expect(rows.map((row) => row.percentageOfTotal)).toEqual([33.3, 33.3, 33.3]);
+  });
+
+  // Dividing by the period total would be a division by zero here, which would
+  // put NaN% in every row rather than a share.
+  it("reports every share as zero in a period with no value", () => {
+    const { rows, periodTotal } = getCategoryBreakdown(
+      ["Travel"],
+      [month("Jul 2026", 0, [{ expenseType: "Travel", amount: 0 }])],
+    );
+
+    expect(periodTotal).toBe(0);
+    expect(rows[0].percentageOfTotal).toBe(0);
+  });
+
+  it("has no rows without categories, and no months without a period", () => {
+    expect(getCategoryBreakdown([], twoMonths).rows).toEqual([]);
+    expect(getCategoryBreakdown(["Travel"], [])).toEqual({
+      rows: [{ expenseType: "Travel", amountsByMonth: [], total: 0, percentageOfTotal: 0 }],
+      monthTotals: [],
+      periodTotal: 0,
+    });
   });
 });

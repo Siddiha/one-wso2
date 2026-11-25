@@ -65,27 +65,39 @@ const report = (over: Partial<ExpenseClaimsReport> = {}): ExpenseClaimsReport =>
 });
 
 describe("buildExpenseReportCsv", () => {
-  it("stacks all four tables under their own headings, plus the summary", () => {
-    const csv = buildExpenseReportCsv(report(), "All Time");
+  it("names the period and currency above the table", () => {
+    const csv = buildExpenseReportCsv(report(), "All Time", "Employee");
 
-    expect(csv).toContain("SUMMARY");
-    expect(csv).toContain("CLAIMS BY STATUS");
-    expect(csv).toContain("CLAIMS BY BUSINESS ENTITY");
-    expect(csv).toContain("MONTHLY BREAKDOWN BY EXPENSE TYPE");
-    expect(csv).toContain("CLAIMS BY EMPLOYEE");
-    expect(csv).toContain("Kasun Perera,kasun@wso2.com,10,1,2.5,1000");
+    expect(csv).toContain("Period,All Time");
+    expect(csv).toContain("Reporting currency,USD");
   });
 
-  // Absent, not "n/a" silently coerced from undefined, and not 0% — those
-  // would both claim something the open-ended period never measured.
-  it("marks a missing prior-period comparison as n/a, not 0%", () => {
-    const csv = buildExpenseReportCsv(
-      report({ claimCountChangePercentage: undefined, totalValueChangePercentage: undefined }),
-      "All Time",
-    );
+  // One tab is one download. Finance asked for the breakdown they are looking
+  // at, so a file carrying the other two makes them find the right table in it.
+  it("writes the Employee breakdown alone when that tab is on screen", () => {
+    const csv = buildExpenseReportCsv(report(), "All Time", "Employee");
 
-    expect(csv).toContain("Claim Count,10,n/a");
-    expect(csv).toContain("Total Value,1000,n/a");
+    expect(csv).toContain("CLAIMS BY EMPLOYEE");
+    expect(csv).toContain("Kasun Perera,kasun@wso2.com,10,1,2.5,1000");
+    expect(csv).not.toContain("CLAIMS BY BUSINESS ENTITY");
+    expect(csv).not.toContain("MONTHLY BREAKDOWN BY EXPENSE TYPE");
+  });
+
+  it("writes the Business Entity breakdown alone when that tab is on screen", () => {
+    const csv = buildExpenseReportCsv(report(), "All Time", "Business Entity");
+
+    expect(csv).toContain("CLAIMS BY BUSINESS ENTITY");
+    expect(csv).toContain("WSO2 Lanka (Pvt) Ltd,10,1000,100,25%");
+    expect(csv).not.toContain("CLAIMS BY EMPLOYEE");
+    expect(csv).not.toContain("MONTHLY BREAKDOWN BY EXPENSE TYPE");
+  });
+
+  it("writes the Monthly breakdown alone when that tab is on screen", () => {
+    const csv = buildExpenseReportCsv(report(), "All Time", "Monthly");
+
+    expect(csv).toContain("MONTHLY BREAKDOWN BY EXPENSE TYPE");
+    expect(csv).not.toContain("CLAIMS BY EMPLOYEE");
+    expect(csv).not.toContain("CLAIMS BY BUSINESS ENTITY");
   });
 
   // The same rule for each entity row: an open-ended period has no prior
@@ -93,7 +105,7 @@ describe("buildExpenseReportCsv", () => {
   it("marks an entity's missing comparison as n/a, not undefined%", () => {
     const base = report();
     const entity = { ...base.entityBreakdown[0], totalValueChangePercentage: undefined };
-    const csv = buildExpenseReportCsv(report({ entityBreakdown: [entity] }), "All Time");
+    const csv = buildExpenseReportCsv(report({ entityBreakdown: [entity] }), "All Time", "Business Entity");
 
     expect(csv).not.toContain("undefined");
     expect(csv).toContain(`${entity.legalName}`);
@@ -117,6 +129,7 @@ describe("buildExpenseReportCsv", () => {
         ],
       }),
       "All Time",
+      "Employee",
     );
 
     expect(csv).toContain("'=SUM(A1:A10)");
@@ -127,8 +140,6 @@ describe("buildExpenseReportCsv", () => {
   it("leaves negative numbers and percentages unguarded", () => {
     const csv = buildExpenseReportCsv(
       report({
-        claimCountChangePercentage: -50,
-        totalValueChangePercentage: -12.5,
         employeeBreakdown: [
           {
             employeeEmail: "x@wso2.com",
@@ -141,9 +152,9 @@ describe("buildExpenseReportCsv", () => {
         ],
       }),
       "All Time",
+      "Employee",
     );
 
-    expect(csv).toContain("Claim Count,10,-50%");
     expect(csv).toContain("Dilani,x@wso2.com,1,0,-1,-50");
     expect(csv).not.toContain("'-");
   });
@@ -173,15 +184,17 @@ describe("buildExpenseReportCsv", () => {
         ],
       }),
       "All Time",
+      "Employee",
     );
 
     expect(csv).toContain("'\t=cmd");
     expect(csv).toContain('"Line\rBreak"');
   });
 
-  // A month missing one of the report's expense-type columns must still
-  // line its OWN amounts up under the right column, not shift left.
-  it("realigns a month's amounts against the full column list, not array order", () => {
+  // A month missing one of the report's expense-type columns must still leave
+  // every category on its own row, rather than shifting a later month's amount
+  // into the gap.
+  it("leaves a category absent from a month at zero, not shifted", () => {
     const csv = buildExpenseReportCsv(
       report({
         monthlyBreakdown: [
@@ -196,10 +209,47 @@ describe("buildExpenseReportCsv", () => {
         ],
       }),
       "All Time",
+      "Monthly",
     );
 
-    // Column order is Travel, Meals — so a correct row reads 0 (Travel) then
-    // 400 (Meals), not 400 shifted into the Travel column.
-    expect(csv).toContain("Jul 2026,0,400,400,100%");
+    expect(csv).toContain("Travel,0,0,0%");
+    expect(csv).toContain("Meals,400,400,100%");
+  });
+
+  it("writes the breakdown with categories as rows and months as columns", () => {
+    const csv = buildExpenseReportCsv(
+      report({
+        monthlyBreakdown: [
+          {
+            month: "2026-07",
+            label: "Jul 2026",
+            amounts: [
+              { expenseType: "Travel", amount: 600 },
+              { expenseType: "Meals", amount: 400 },
+            ],
+            total: 1000,
+            percentageOfTotal: 50,
+          },
+          {
+            month: "2026-08",
+            label: "Aug 2026",
+            amounts: [
+              { expenseType: "Travel", amount: 150 },
+              { expenseType: "Meals", amount: 850 },
+            ],
+            total: 1000,
+            percentageOfTotal: 50,
+          },
+        ],
+      }),
+      "All Time",
+      "Monthly",
+    );
+
+    expect(csv).toContain("Category,Jul 2026,Aug 2026,Total (USD),% of Total");
+    expect(csv).toContain("Travel,600,150,750,37.5%");
+    expect(csv).toContain("Meals,400,850,1250,62.5%");
+    // The footer row, so a reader can reconcile either axis against the period.
+    expect(csv).toContain("Total,1000,1000,2000,100%");
   });
 });

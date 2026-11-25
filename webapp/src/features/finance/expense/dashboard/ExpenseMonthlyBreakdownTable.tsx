@@ -14,13 +14,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Box, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from "@wso2/oxygen-ui";
+import { Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@wso2/oxygen-ui";
 import { money } from "../../util/financeFormat";
 import { CELL_SX, HEAD_SX } from "../../components/dashboardTableSx";
+import { getCategoryBreakdown } from "./expenseDashboardUtils";
 import type { ExpenseReportMonthlyItem } from "../expenseTypes";
 
-/** One row per month, one column per expense category, with a Total column
- *  and a totals row underneath. */
+/** One row per expense category, one column per month, with trailing Total and
+ *  % columns and a per-month totals row underneath. */
 export function ExpenseMonthlyBreakdownTable({
   expenseTypeColumns,
   items,
@@ -38,34 +39,16 @@ export function ExpenseMonthlyBreakdownTable({
     );
   }
 
-  const amountFor = (item: ExpenseReportMonthlyItem, expenseType: string): number =>
-    item.amounts.find((amount) => amount.expenseType === expenseType)?.amount ?? 0;
-  const columnTotal = (expenseType: string): number =>
-    items.reduce((sum, item) => sum + amountFor(item, expenseType), 0);
-  const periodTotal = items.reduce((sum, item) => sum + item.total, 0);
+  const { rows, monthTotals, periodTotal } = getCategoryBreakdown(expenseTypeColumns, items);
 
   return (
     <Table size="small">
       <TableHead>
         <TableRow sx={HEAD_SX}>
-          <TableCell>Month</TableCell>
-          {expenseTypeColumns.map((expenseType) => (
-            <TableCell key={expenseType} align="right">
-              <Tooltip title={expenseType} arrow>
-                <Box
-                  component="span"
-                  sx={{
-                    display: "inline-block",
-                    maxWidth: 150,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    verticalAlign: "bottom",
-                  }}
-                >
-                  {expenseType}
-                </Box>
-              </Tooltip>
+          <TableCell>Category</TableCell>
+          {items.map((item) => (
+            <TableCell key={item.month} align="right" sx={{ whiteSpace: "nowrap" }}>
+              {item.label}
             </TableCell>
           ))}
           <TableCell align="right">Total</TableCell>
@@ -73,27 +56,29 @@ export function ExpenseMonthlyBreakdownTable({
         </TableRow>
       </TableHead>
       <TableBody>
-        {items.map((item) => (
-          <TableRow key={item.month}>
-            <TableCell sx={{ ...CELL_SX, whiteSpace: "nowrap" }}>{item.label}</TableCell>
-            {expenseTypeColumns.map((expenseType) => (
-              <TableCell key={expenseType} align="right" sx={CELL_SX}>
-                {money(amountFor(item, expenseType), currency)}
+        {rows.map((row) => (
+          <TableRow key={row.expenseType}>
+            {/* The period runs to at most twelve months, so the category column
+                has the room to carry a whole name on one line. */}
+            <TableCell sx={{ ...CELL_SX, whiteSpace: "nowrap" }}>{row.expenseType}</TableCell>
+            {row.amountsByMonth.map((amount, index) => (
+              <TableCell key={items[index].month} align="right" sx={CELL_SX}>
+                {money(amount, currency)}
               </TableCell>
             ))}
             <TableCell align="right" sx={CELL_SX}>
-              {money(item.total, currency)}
+              {money(row.total, currency)}
             </TableCell>
             <TableCell align="right" sx={CELL_SX}>
-              {item.percentageOfTotal}%
+              {row.percentageOfTotal}%
             </TableCell>
           </TableRow>
         ))}
         <TableRow sx={{ "& td": { fontWeight: 700, border: 0, bgcolor: "action.hover" } }}>
           <TableCell sx={CELL_SX}>Total</TableCell>
-          {expenseTypeColumns.map((expenseType) => (
-            <TableCell key={expenseType} align="right" sx={CELL_SX}>
-              {money(columnTotal(expenseType), currency)}
+          {monthTotals.map((total, index) => (
+            <TableCell key={items[index].month} align="right" sx={CELL_SX}>
+              {money(total, currency)}
             </TableCell>
           ))}
           <TableCell align="right" sx={CELL_SX}>

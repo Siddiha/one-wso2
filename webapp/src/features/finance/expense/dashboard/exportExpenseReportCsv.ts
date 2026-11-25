@@ -15,6 +15,7 @@
 // under the License.
 
 import { saveBlob } from "@utils/saveFile";
+import { getCategoryBreakdown, type BreakdownTab } from "./expenseDashboardUtils";
 import type { ExpenseClaimsReport, ExpenseDashboardPeriod } from "../expenseTypes";
 
 // A leading =, +, -, @, tab or carriage return can make spreadsheet software
@@ -37,40 +38,13 @@ function section(title: string, header: string[], rows: (string | number)[][]): 
   return [title, toRow(header), ...rows.map(toRow), ""];
 }
 
-/**
- * The dashboard's four tables, stacked into one file under their own
- * headings. One file rather than one per table, because finance reviews them
- * together and four separate downloads for one Export click is not what the
- * button promises.
- */
-export function buildExpenseReportCsv(report: ExpenseClaimsReport, period: ExpenseDashboardPeriod): string {
+/** The one breakdown `tab` names, as its own section. */
+function breakdownSection(report: ExpenseClaimsReport, tab: BreakdownTab): string[] {
   const currency = report.reportingCurrency;
-  const change = (value?: number): string => (value === undefined ? "n/a" : `${value}%`);
 
-  const lines: string[] = [
-    "Expense Claims Dashboard",
-    toRow(["Period", period]),
-    toRow(["Reporting currency", currency]),
-    "",
-    ...section(
-      "SUMMARY",
-      ["Metric", "Value", "vs Prior Period"],
-      [
-        ["Claim Count", report.current.claimCount, change(report.claimCountChangePercentage)],
-        ["Total Value", report.current.totalValue, change(report.totalValueChangePercentage)],
-        [
-          "Average Claim Value",
-          report.current.averageClaimValue,
-          change(report.averageClaimValueChangePercentage),
-        ],
-      ],
-    ),
-    ...section(
-      "CLAIMS BY STATUS",
-      ["Status", "Count", "Avg Days Pending"],
-      report.statusBreakdown.map((item) => [item.status, item.count, item.averageDaysPending]),
-    ),
-    ...section(
+  if (tab === "Business Entity") {
+    const change = (value?: number): string => (value === undefined ? "n/a" : `${value}%`);
+    return section(
       "CLAIMS BY BUSINESS ENTITY",
       ["Business Entity", "Count", `Total Value (${currency})`, `Avg Value (${currency})`, "vs Prior Period"],
       report.entityBreakdown.map((item) => [
@@ -80,44 +54,81 @@ export function buildExpenseReportCsv(report: ExpenseClaimsReport, period: Expen
         item.averageClaimValue,
         change(item.totalValueChangePercentage),
       ]),
-    ),
-    ...section(
+    );
+  }
+
+  if (tab === "Monthly") {
+    // The same transposition the table renders, from the same helper, so the
+    // file and the screen cannot disagree.
+    const breakdown = getCategoryBreakdown(report.expenseTypeColumns, report.monthlyBreakdown);
+    return section(
       "MONTHLY BREAKDOWN BY EXPENSE TYPE",
-      ["Month", ...report.expenseTypeColumns, `Total (${currency})`, "% of Total"],
-      report.monthlyBreakdown.map((item) => [
-        item.label,
-        // Realigned against expenseTypeColumns rather than trusting array
-        // order, so a month missing an expense type cannot shift every
-        // later column.
-        ...report.expenseTypeColumns.map(
-          (column) => item.amounts.find((amount) => amount.expenseType === column)?.amount ?? 0,
-        ),
-        item.total,
-        `${item.percentageOfTotal}%`,
-      ]),
-    ),
-    ...section(
-      "CLAIMS BY EMPLOYEE",
-      ["Employee", "Email", "Claims", "Pending", "Claims / Month", `Total Value (${currency})`],
-      report.employeeBreakdown.map((item) => [
-        item.employeeName,
-        item.employeeEmail,
-        item.claimCount,
-        item.pendingCount,
-        item.claimsPerMonth,
-        item.totalValue,
-      ]),
-    ),
+      ["Category", ...report.monthlyBreakdown.map((item) => item.label), `Total (${currency})`, "% of Total"],
+      [
+        ...breakdown.rows.map((row) => [
+          row.expenseType,
+          ...row.amountsByMonth,
+          row.total,
+          `${row.percentageOfTotal}%`,
+        ]),
+        // The table's footer row, carried into the file so a reader can
+        // reconcile a month's column against it without re-adding it.
+        ["Total", ...breakdown.monthTotals, breakdown.periodTotal, "100%"],
+      ],
+    );
+  }
+
+  return section(
+    "CLAIMS BY EMPLOYEE",
+    ["Employee", "Email", "Claims", "Pending", "Claims / Month", `Total Value (${currency})`],
+    report.employeeBreakdown.map((item) => [
+      item.employeeName,
+      item.employeeEmail,
+      item.claimCount,
+      item.pendingCount,
+      item.claimsPerMonth,
+      item.totalValue,
+    ]),
+  );
+}
+
+/**
+ * The breakdown on screen, as a CSV under its own heading, above a header
+ * naming the period and currency the figures are in.
+ *
+ * @param report - The report the dashboard is showing, already narrowed by the applied filters.
+ * @param period - The applied period, named in the header.
+ * @param tab - The breakdown tab on screen, and the only one written.
+ */
+export function buildExpenseReportCsv(
+  report: ExpenseClaimsReport,
+  period: ExpenseDashboardPeriod,
+  tab: BreakdownTab,
+): string {
+  const lines: string[] = [
+    "Expense Claims Dashboard",
+    toRow(["Period", period]),
+    toRow(["Reporting currency", report.reportingCurrency]),
+    "",
+    ...breakdownSection(report, tab),
   ];
 
   return lines.join("\n");
 }
 
-export function downloadExpenseReportCsv(report: ExpenseClaimsReport, period: ExpenseDashboardPeriod): void {
+const slug = (text: string): string => text.toLowerCase().replace(/\s+/g, "-");
+
+export function downloadExpenseReportCsv(
+  report: ExpenseClaimsReport,
+  period: ExpenseDashboardPeriod,
+  tab: BreakdownTab,
+): void {
   // A leading BOM so Excel reads the file as UTF-8 rather than the local
   // codepage.
-  const blob = new Blob(["﻿", buildExpenseReportCsv(report, period)], {
+  const blob = new Blob(["﻿", buildExpenseReportCsv(report, period, tab)], {
     type: "text/csv;charset=utf-8",
   });
-  saveBlob(blob, `expense-claims-dashboard-${period.toLowerCase().replace(/\s+/g, "-")}.csv`);
+  // The tab is in the name too, so two breakdowns of one period do not collide
+  // in the downloads folder.
+  saveBlob(blob, `expense-claims-${slug(tab)}-${slug(period)}.csv`);
 }

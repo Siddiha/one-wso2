@@ -23,6 +23,7 @@ import type {
   ExpenseDashboardPeriod,
   ExpenseEmployee,
   ExpenseReportEmployeeOption,
+  ExpenseReportMonthlyItem,
   ExpenseSubsidiarySummary,
   ExpenseTypeData,
 } from "../expenseTypes";
@@ -168,3 +169,60 @@ export function getEntityCodeForLabel(
 ): string | undefined {
   return subsidiaries.find((subsidiary) => getEntityLabel(subsidiary, subsidiaries) === label)?.code;
 }
+
+/** One category of the breakdown: its amount in each month of the period, its
+ *  period total and its share of that period. */
+export interface ExpenseCategoryBreakdownRow {
+  expenseType: string;
+  /** One amount per month, positionally matching the report's months. */
+  amountsByMonth: number[];
+  total: number;
+  percentageOfTotal: number;
+}
+
+/** The breakdown read by category: `rows` per category, `monthTotals` per
+ *  month and the period total the two reconcile to. */
+export interface ExpenseCategoryBreakdown {
+  rows: ExpenseCategoryBreakdownRow[];
+  monthTotals: number[];
+  periodTotal: number;
+}
+
+/**
+ * The monthly breakdown read the other way round — a row per expense category
+ * and a column per month, which is the orientation both the table and the CSV
+ * export render.
+ *
+ * @param expenseTypeColumns - Every expense category the report covers, in the order they are shown.
+ * @param monthlyBreakdown - The report's months, in the order they are shown.
+ */
+export function getCategoryBreakdown(
+  expenseTypeColumns: readonly string[],
+  monthlyBreakdown: readonly ExpenseReportMonthlyItem[],
+): ExpenseCategoryBreakdown {
+  const monthTotals = monthlyBreakdown.map((item) => item.total);
+  const periodTotal = monthTotals.reduce((sum, total) => sum + total, 0);
+
+  const rows = expenseTypeColumns.map((expenseType) => {
+    // Found by name in each month rather than taken by position, so a month
+    // whose amounts omit a category cannot shift the rest of that row.
+    const amountsByMonth = monthlyBreakdown.map(
+      (item) => item.amounts.find((amount) => amount.expenseType === expenseType)?.amount ?? 0,
+    );
+    const total = amountsByMonth.reduce((sum, amount) => sum + amount, 0);
+    return {
+      expenseType,
+      amountsByMonth,
+      total,
+      // One decimal, matching the month shares the backend sends.
+      percentageOfTotal: periodTotal === 0 ? 0 : Math.round((total / periodTotal) * 1000) / 10,
+    };
+  });
+
+  return { rows, monthTotals, periodTotal };
+}
+
+/** The breakdown tables, one per tab, in the order the tabs are shown. */
+export const BREAKDOWN_TABS = ["Business Entity", "Monthly", "Employee"] as const;
+
+export type BreakdownTab = (typeof BREAKDOWN_TABS)[number];

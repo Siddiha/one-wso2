@@ -51,17 +51,16 @@ import {
   ALL_ENTITIES,
   ALL_REGIONS,
   ALL_STATUSES,
+  BREAKDOWN_TABS,
   getCategoryOptions,
   getEmployeeOptions,
   getEntityCodeForLabel,
   getEntityLabel,
   getExpenseTypeIdsForCategory,
   getPeriodRange,
+  type BreakdownTab,
 } from "./expenseDashboardUtils";
 import { EXPENSE_FILTERABLE_STATUSES } from "../expenseTypes";
-
-const BREAKDOWN_TABS = ["Business Entity", "Monthly", "Employee"] as const;
-type BreakdownTab = (typeof BREAKDOWN_TABS)[number];
 
 // Custom starts on the current quarter, so its From and To fields are filled
 // from the first render rather than blank.
@@ -372,11 +371,11 @@ function DashboardBody() {
                 >
                   <MenuItem
                     onClick={() => {
-                      downloadExpenseReportCsv(report.data!, applied.period);
+                      downloadExpenseReportCsv(report.data!, applied.period, activeTab);
                       setExportAnchor(null);
                     }}
                   >
-                    Download as CSV
+                    {`Download ${activeTab} as CSV`}
                   </MenuItem>
                   <MenuItem
                     onClick={() => {
