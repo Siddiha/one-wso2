@@ -212,6 +212,27 @@ export function IdSelectInput({
 }
 
 /**
+ * The helper line every multi-select carries unless it is given another.
+ *
+ * Without it, that these lists accept values not already on them is
+ * something the reader has to guess.
+ */
+const MULTI_SELECT_HELPER = "For custom text, type and press Enter";
+
+/**
+ * Caps the field's height and scrolls its chips inside it.
+ *
+ * Opt-in, because by default a multi-select grows a row taller per chip,
+ * which is what a form with room below it should do. On a form that has none
+ * the growing field pushes everything under it off the dialog instead.
+ * Scrolled rather than truncated: every chip has to stay reachable, because
+ * reaching it is how you delete it.
+ */
+const SCROLLING_CHIPS_SX = {
+  "& .MuiAutocomplete-inputRoot": { maxHeight: 72, overflowY: "auto" },
+} as const;
+
+/**
  * Pick any number of values, typing new ones as needed.
  *
  * Every multi-select in the source is `freeForm` — engagement codes, their
@@ -224,6 +245,8 @@ export function MultiSelectInput({
   options,
   required,
   helperText,
+  hideHelper = false,
+  scrollChips = false,
   onChange,
 }: {
   id: string;
@@ -233,6 +256,13 @@ export function MultiSelectInput({
   required: boolean;
   /** Replaces the default "type and press Enter" line — add a sample to it. */
   helperText?: string;
+  /**
+   * Drops the helper line altogether, for a form that says the same thing
+   * once below a pair of these fields rather than twice beside them.
+   */
+  hideHelper?: boolean;
+  /** Keeps the field one height whatever is selected — see `SCROLLING_CHIPS_SX`. */
+  scrollChips?: boolean;
   onChange: (id: string, values: string[]) => void;
 }) {
   const [touched, setTouched] = useState(false);
@@ -244,13 +274,7 @@ export function MultiSelectInput({
       autoHighlight
       options={options}
       value={[...values]}
-      // A mapping can carry a dozen engagement codes, and by default this
-      // field grows a row taller per chip until it pushes everything below
-      // it off the dialog. Capped, the chips scroll inside the field
-      // instead. Scrolled rather than truncated, unlike the filter bar:
-      // here every chip has to stay reachable, because reaching it is how
-      // you delete it.
-      sx={{ "& .MuiAutocomplete-inputRoot": { maxHeight: 72, overflowY: "auto" } }}
+      sx={scrollChips ? SCROLLING_CHIPS_SX : undefined}
       onBlur={() => required && setTouched(true)}
       // Blank entries are dropped on the way in, the way `FormDialog.tsx:96-110`
       // filters them — pressing Enter on an empty box should not add a chip
@@ -268,11 +292,7 @@ export function MultiSelectInput({
           label={label}
           required={required}
           error={required && touched && values.length === 0}
-          // Every multi-select says this. Without it, that these lists
-          // accept values not already on them is something the reader has to
-          // guess. An empty string asks for no helper at all, for a form
-          // that says it once below the pair instead of twice beside them.
-          helperText={helperText === "" ? undefined : (helperText ?? "For custom text, type and press Enter")}
+          helperText={hideHelper ? undefined : (helperText ?? MULTI_SELECT_HELPER)}
         />
       )}
     />

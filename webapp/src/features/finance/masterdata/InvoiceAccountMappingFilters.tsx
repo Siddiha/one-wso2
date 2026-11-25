@@ -18,19 +18,7 @@ import { useMemo, useState } from "react";
 import { Autocomplete, Box, Button, Checkbox, Chip, Stack, TextField, Tooltip } from "@wso2/oxygen-ui";
 import type { InvoiceMappingFilter, InvoiceMappingFilterOptions } from "./invoiceMappingFilters";
 
-/**
- * The four filters above the invoice account mapping table.
- *
- * No Apply button, unlike the expense-type bar: these narrow rows already on
- * screen, so there is no request to issue and waiting for a click would only
- * be in the way.
- *
- * Status is not here. It is a "Show Inactive" switch beside the table, since
- * the active mappings are what a reader wants almost every time and that is
- * not worth opening a panel for.
- */
-
-// Matches the expense-type bar, so the two read as one screen.
+/** Matches the expense-type bar, so the two read as one screen. */
 const FILTER_GRID_SX = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
@@ -38,29 +26,19 @@ const FILTER_GRID_SX = {
   mb: 1.5,
 } as const;
 
-/**
- * One row of chips, however many are selected.
- *
- * A multi-select grows a row taller per chip by default, which on four
- * filters side by side pushes the table off the screen, and the box that
- * grew is the one you are least likely to be reading. So the row stays one
- * line high and the chips past the first few become a `+n`.
- *
- * Truncating rather than scrolling sideways: the clear and dropdown buttons
- * are positioned over the right-hand end of this row, so a row that scrolled
- * would carry them out of reach. Everything selected is readable in the
- * dropdown, which lists it first and ticked, and in this row's tooltip.
- *
- * The row has to stop before those two buttons rather than run under them,
- * which takes both constants below: the field keeps room for them at its
- * end, and the chips sit in a box that is clipped at the edge of that room.
- * `overflow` on the field itself would not do, because it clips at the
- * padding edge, which is past the buttons rather than before them.
- */
-
 /** Room kept at the end of a filter box for its clear and dropdown buttons. */
 const END_BUTTONS_WIDTH = 60;
 
+/**
+ * A filter box that stays one line high however many values are selected.
+ *
+ * A multi-select grows a row taller per chip by default, which on four
+ * filters side by side pushes the table off the screen, and the box that
+ * grew is the one you are least likely to be reading.
+ *
+ * The chips are kept clear of the clear and dropdown buttons by reserving
+ * room for them here, rather than by letting the row run underneath them.
+ */
 const FIELD_SX = {
   minWidth: 0,
   "& .MuiAutocomplete-inputRoot": {
@@ -74,7 +52,13 @@ const FIELD_SX = {
   "& .MuiAutocomplete-clearIndicator": { visibility: "visible" },
 } as const;
 
-/** The box holding the chips, which is what cuts the row off. */
+/**
+ * The box holding the chips, and what actually cuts the row off.
+ *
+ * Its own element rather than `overflow` on the field: the field clips at
+ * its padding edge, which is past the end buttons rather than before them,
+ * so the chips would still run under them.
+ */
 const TAGS_SX = {
   display: "flex",
   alignItems: "center",
@@ -86,7 +70,14 @@ const TAGS_SX = {
 /** Chips a filter box shows before the rest become a `+n`. */
 const MAX_FILTER_CHIPS = 2;
 
-/** Multi-select over plain strings, with what is already picked listed first. */
+/**
+ * Multi-select over plain strings, with what is already picked listed first.
+ *
+ * The chips past the first few become a `+n` rather than scrolling sideways,
+ * which would carry the clear and dropdown buttons out of reach. Everything
+ * selected stays readable in the dropdown, which lists it first and ticked,
+ * and in the `+n` chip's tooltip.
+ */
 function StringFilter({
   label,
   values,
@@ -156,6 +147,16 @@ function StringFilter({
   );
 }
 
+/**
+ * The four filters above the invoice account mapping table.
+ *
+ * No Apply button, unlike the expense-type bar: a settled value here is a
+ * request either way, so waiting for a click would only be in the way.
+ *
+ * Status is not among them. It is a "Show Inactive" switch beside the table,
+ * since the active mappings are what a reader wants almost every time and
+ * that is not worth opening a panel for.
+ */
 export default function InvoiceAccountMappingFilters({
   filter,
   options,

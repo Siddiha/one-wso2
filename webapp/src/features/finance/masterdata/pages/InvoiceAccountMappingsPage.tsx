@@ -44,17 +44,39 @@ import {
   type InvoiceMappingFilter,
 } from "../invoiceMappingFilters";
 
-// The filter panel's height slide, and the fade that covers it. Same values as
-// the expense-type bar, so the two tabs open the same way.
+// The filter panel's height slide, and the fade that covers it. Same values
+// as the expense-type bar, so the two tabs open the same way.
+
+/** Easing for the panel opening, which decelerates into place. */
 const FILTER_EASE_IN = "cubic-bezier(0.4, 0, 0.2, 1)";
+
+/** Easing for the panel closing, which accelerates away. */
 const FILTER_EASE_OUT = "cubic-bezier(0.4, 0, 1, 1)";
+
+/** How long the panel's height takes to open or close. */
 const FILTER_SLIDE_MS = 260;
+
+/** How long the panel's contents take to fade in. */
 const FILTER_FADE_IN_MS = 220;
+
+/** How long they take to fade out — quicker, so they are gone before the
+ *  height finishes collapsing onto them. */
 const FILTER_FADE_OUT_MS = 120;
-// Lets the height open before the contents arrive.
+
+/** Lets the height open before the contents arrive. */
 const FILTER_FADE_DELAY_MS = 40;
 
+/** The properties the fade animates. */
 const FADE_PROPS = ["opacity", "transform"];
+
+/**
+ * One `transition` value covering every property in `FADE_PROPS`.
+ *
+ * @param ms - Duration of the fade.
+ * @param ease - Easing curve to run it on.
+ * @param delay - Pause before it starts.
+ * @returns A CSS `transition` list.
+ */
 const fadeTransition = (ms: number, ease: string, delay = 0) =>
   FADE_PROPS.map((prop) => `${prop} ${ms}ms ${ease} ${delay}ms`).join(", ");
 
@@ -77,22 +99,18 @@ const MAPPING_PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 350;
 
 /**
- * The invoice account classification mappings.
+ * The invoice account classification mappings, searched and paged.
  *
  * These decide which NetSuite account and department a travel invoice or per
- * diem bill is posted to. Until this screen existed they were maintained by
- * emailing Finance's spreadsheet to the Digital team, who inserted the rows
- * by hand — so a missing mapping surfaced as a failed NetSuite sync and took
- * a person in another team to fix.
+ * diem bill is posted to.
  *
  * Travel Invoice mappings and Per diem mappings are one table, not two: the
- * cost type is what separates them, and "Currency (per diem / allowances)" is
- * the per diem one. So this is a single screen with a Cost Type column rather
- * than the two screens Finance's two spreadsheet tabs might suggest.
+ * cost type is what separates them, and "Currency (per diem / allowances)"
+ * is the per diem one. So this is a single screen with a Cost Type column.
  *
- * Only the active mappings are shown unless Show Inactive is switched on,
- * which is what a reader wants nearly every time — an inactive mapping is a
- * retired one, looked up when something old has to be brought back.
+ * Only the active mappings are shown unless Show Inactive is switched on. An
+ * inactive mapping is a retired one, looked up when something old has to be
+ * brought back.
  */
 export default function InvoiceAccountMappingsPage() {
   const [showFilters, setShowFilters] = useState(false);
@@ -111,7 +129,12 @@ export default function InvoiceAccountMappingsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Two cost type lists, deliberately. This one is every ACTIVE cost type, so
+  // the form can file a mapping under one nothing uses yet.
   const costTypes = useInvoiceCostTypes();
+  // The autocomplete's `costTypes` is the narrower list of those some mapping
+  // is actually filed under, which is what the filter should offer: a cost
+  // type no row carries could only filter the table down to nothing.
   const autoComplete = useInvoiceAccountMappingAutoComplete();
   // The mapping form's GL Code picker, which fills in the account number,
   // name and internal ID together.

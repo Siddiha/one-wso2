@@ -259,10 +259,10 @@ export function useInvoiceCostTypes(enabled = true) {
  * Invoice account mappings matching a filter — POST
  * `invoice-account-mappings/search`.
  *
- * Answers with a page and the total that page was taken from, rather than
- * with a bare array. The screen asks for one large page today and narrows it
- * in the browser; the endpoint is what lets that become a real page later
- * without the request shape changing again.
+ * Every filter, the search term and the page are part of the request, so the
+ * rows that come back are the answer rather than something to narrow further
+ * here. Answers with a page and the total that page was taken from, which is
+ * what lets the grid show a page count it did not have to count itself.
  */
 export function useInvoiceAccountMappings(filters: InvoiceAccountMappingFilter = {}, enabled = true) {
   const { isSignedIn } = useAsgardeo();

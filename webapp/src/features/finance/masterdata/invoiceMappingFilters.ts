@@ -61,6 +61,7 @@ export interface InvoiceMappingFilterOptions {
   departments: string[];
 }
 
+/** The distinct values, in the order a dropdown should offer them. */
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }

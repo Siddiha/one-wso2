@@ -211,14 +211,16 @@ export interface EmployeeEmail {
 // Served by ONE_WSO2_FINANCE_MASTER_DATA_BACKEND_URL like the rest of these
 // screens, though these rows are not held in the finance master data database
 // itself.
-//
-// A mapping decides which NetSuite account and department a travel invoice or
-// per diem bill is posted to. It is matched by engagement code — or, failing
-// that, by a suffix of one — narrowed to a cost type. Per diem is not a
-// separate table: it is cost type "Currency (per diem / allowances)", which is
-// why one screen answers Finance's request for both a Travel Invoice mapping
-// and a Per diem mapping.
 
+/**
+ * One rule deciding which NetSuite account and department a travel invoice or
+ * per diem bill is posted to.
+ *
+ * Matched by engagement code — or, failing that, by a suffix of one —
+ * narrowed to a cost type. Per diem is not a separate table: it is cost type
+ * "Currency (per diem / allowances)", so Travel Invoice and Per diem
+ * mappings are rows of this one table told apart by `costType`.
+ */
 export interface InvoiceAccountMapping {
   id: number;
   /** NetSuite internal ID of the account. */
@@ -236,6 +238,12 @@ export interface InvoiceAccountMapping {
   status: string;
 }
 
+/**
+ * A mapping as the Add and Edit forms send it.
+ *
+ * No `id` and no `costType`: the first is the URL on an edit, and the second
+ * is the backend's own join on `invCostTypeId`.
+ */
 export interface InvoiceAccountMappingPayload {
   internalId: string;
   accountNumber: string;

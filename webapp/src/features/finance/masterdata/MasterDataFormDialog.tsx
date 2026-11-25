@@ -82,6 +82,17 @@ const MAPPING_FORM_SX = {
 } as const;
 
 /**
+ * The tabs whose status toggle sits between the dialog content and its
+ * actions, rather than at the foot of the field list.
+ *
+ * Only the mapping form, which is the long one: there the toggle fell below
+ * the fold, so the one control a reader goes looking for when they want a
+ * mapping retired was the one they had to scroll to find. The shorter forms
+ * have room for it in the field list and keep it there.
+ */
+const STATUS_BELOW_CONTENT: readonly MasterDataTab[] = ["invoiceAccountMappings"];
+
+/**
  * Add / edit, for every tab.
  *
  * One dialog rather than one per tab: the submit path, the enable rule and
@@ -168,6 +179,7 @@ export default function MasterDataFormDialog({
             showSuccess(MASTER_DATA_SNACK.success.updated);
             onClose();
           },
+          // The patch says which refusal a 409 was: retiring or reactivating.
           onError: (error) => showError(describeUpdateError(error, patch)),
         },
       );
@@ -193,11 +205,7 @@ export default function MasterDataFormDialog({
       <DialogTitle id="master-data-form-title">
         {isCreate ? copy.addTitle : copy.editTitle}
       </DialogTitle>
-      {/* No scrollbar: the form above is laid out to fit, and a form that
-          has to be scrolled is how the status toggle came to be missed in
-          the first place. `visible` on small screens would clip, so the
-          overflow only gives way below the height the layout assumes. */}
-      <DialogContent dividers sx={{ overflowY: "auto" }}>
+      <DialogContent dividers>
         <Fields
           tab={tab}
           form={form}
@@ -211,11 +219,9 @@ export default function MasterDataFormDialog({
           countryCurrency={countries.data ?? {}}
         />
       </DialogContent>
-      {/* Outside the scrolling content, not at the foot of it. This is how a
-          record is retired, and on the longer forms it used to sit below the
-          fold — so the one control a reader goes looking for when they want a
-          mapping gone was the one they had to scroll to find. */}
-      <StatusToggle value={(form as { status?: string }).status} onChange={set} />
+      {STATUS_BELOW_CONTENT.includes(tab) && (
+        <StatusToggle value={(form as { status?: string }).status} onChange={set} belowContent />
+      )}
       <DialogActions>
         <Button onClick={onClose} disabled={pending} color="inherit">
           Cancel
@@ -394,6 +400,7 @@ function Fields({
               onChange={set}
             />
           </Box>
+          <StatusToggle value={f.status} onChange={set} />
         </>
       );
     }
@@ -509,7 +516,8 @@ function Fields({
             values={f.engagementCodes}
             options={mappingAutoComplete?.engagementCodes ?? []}
             required={false}
-            helperText=""
+            hideHelper
+            scrollChips
             onChange={set}
           />
           <MultiSelectInput
@@ -518,7 +526,8 @@ function Fields({
             values={f.engagementCodeSuffixes}
             options={mappingAutoComplete?.engagementCodeSuffixes ?? []}
             required={false}
-            helperText=""
+            hideHelper
+            scrollChips
             onChange={set}
           />
 
@@ -585,6 +594,7 @@ function Fields({
             multiline
             onChange={set}
           />
+          <StatusToggle value={f.status} onChange={set} />
         </>
       );
     }
@@ -603,17 +613,21 @@ function Fields({
 function StatusToggle({
   value,
   onChange,
+  belowContent = false,
 }: {
   value?: string;
   onChange: (key: string, value: string) => void;
+  /**
+   * Padded for sitting between the dialog content and its actions, instead
+   * of spaced for the foot of the field list. See `STATUS_BELOW_CONTENT`.
+   */
+  belowContent?: boolean;
 }) {
   if (value === undefined) return null;
   const active = value === MASTER_DATA_STATUS.active;
   return (
     <FormControlLabel
-      // Its own padding, now that it sits between the content and the
-      // actions rather than inside the scrolling field list.
-      sx={{ px: 3, py: 1.5, mr: 0 }}
+      sx={belowContent ? { px: 3, py: 1.5, mr: 0 } : { mt: 0.5 }}
       control={
         <Switch
           checked={active}
