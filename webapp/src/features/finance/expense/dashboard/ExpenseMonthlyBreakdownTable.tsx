@@ -20,6 +20,17 @@ import { CELL_SX, HEAD_SX } from "../../components/dashboardTableSx";
 import { getCategoryBreakdown } from "./expenseDashboardUtils";
 import type { ExpenseReportMonthlyItem } from "../expenseTypes";
 
+// "All Time" and a multi-year custom range are not capped at twelve months, so
+// the row of month columns can outrun the viewport. The category column is
+// pinned to the left edge, which keeps every amount attributable to its row
+// however far the table is scrolled.
+const STICKY_SX = {
+  position: "sticky",
+  left: 0,
+  zIndex: 1,
+  whiteSpace: "nowrap",
+} as const;
+
 /** One row per expense category, one column per month, with trailing Total and
  *  % columns and a per-month totals row underneath. */
 export function ExpenseMonthlyBreakdownTable({
@@ -45,7 +56,7 @@ export function ExpenseMonthlyBreakdownTable({
     <Table size="small">
       <TableHead>
         <TableRow sx={HEAD_SX}>
-          <TableCell>Category</TableCell>
+          <TableCell sx={{ ...STICKY_SX, bgcolor: "background.paper" }}>Category</TableCell>
           {items.map((item) => (
             <TableCell key={item.month} align="right" sx={{ whiteSpace: "nowrap" }}>
               {item.label}
@@ -58,9 +69,9 @@ export function ExpenseMonthlyBreakdownTable({
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.expenseType}>
-            {/* The period runs to at most twelve months, so the category column
-                has the room to carry a whole name on one line. */}
-            <TableCell sx={{ ...CELL_SX, whiteSpace: "nowrap" }}>{row.expenseType}</TableCell>
+            <TableCell sx={{ ...CELL_SX, ...STICKY_SX, bgcolor: "background.paper" }}>
+              {row.expenseType}
+            </TableCell>
             {row.amountsByMonth.map((amount, index) => (
               <TableCell key={items[index].month} align="right" sx={CELL_SX}>
                 {money(amount, currency)}
@@ -75,7 +86,7 @@ export function ExpenseMonthlyBreakdownTable({
           </TableRow>
         ))}
         <TableRow sx={{ "& td": { fontWeight: 700, border: 0, bgcolor: "action.hover" } }}>
-          <TableCell sx={CELL_SX}>Total</TableCell>
+          <TableCell sx={{ ...CELL_SX, ...STICKY_SX }}>Total</TableCell>
           {monthTotals.map((total, index) => (
             <TableCell key={items[index].month} align="right" sx={CELL_SX}>
               {money(total, currency)}
