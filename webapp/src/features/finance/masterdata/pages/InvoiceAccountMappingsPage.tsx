@@ -125,7 +125,12 @@ export default function InvoiceAccountMappingsPage() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setSearchTerm(search), SEARCH_DEBOUNCE_MS);
+    const timer = setTimeout(() => {
+      setSearchTerm(search);
+      // Reset with the settled term rather than with each keystroke: the page
+      // a reader is on only becomes wrong once the question actually changes.
+      setPageModel((model) => (model.page === 0 ? model : { ...model, page: 0 }));
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -178,7 +183,7 @@ export default function InvoiceAccountMappingsPage() {
     <MasterDataScreen
       tab="invoiceAccountMappings"
       rows={rows}
-      loading={query.isLoading}
+      loading={query.isLoading || query.isPlaceholderData}
       pagination={{ rowCount: totalCount, model: pageModel, onModelChange: setPageModel }}
       error={query.isError ? query.error : undefined}
       onRetry={() => {
@@ -200,10 +205,7 @@ export default function InvoiceAccountMappingsPage() {
             size="small"
             placeholder="Search mappings"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              firstPage();
-            }}
+            onChange={(e) => setSearch(e.target.value)}
             sx={{ width: 260 }}
             slotProps={{
               htmlInput: { "aria-label": "Search mappings", ref: searchRef },

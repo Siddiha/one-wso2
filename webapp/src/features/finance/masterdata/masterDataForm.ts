@@ -76,8 +76,9 @@ export const INITIAL_SORT_FIELD: Record<MasterDataTab, string> = {
   departments: "employeeDepartment",
   expenseTypes: "expenseType",
   creditCards: "employeeEmail",
-  // By GL code, which is the column the table now leads with — a code
-  // identifies one account where a name can repeat across several.
+  // Unused: this tab is paged on the server, which takes its order from the
+  // request, so the grid is seeded with no sort model at all. Listed because
+  // the map covers every tab.
   invoiceAccountMappings: "accountNumber",
 };
 
@@ -186,11 +187,28 @@ export function isEngagementCodeValid(code: string): boolean {
   return /^[\p{L}\p{N}_.-]+$/u.test(code);
 }
 
-/** The codes on this form that could not be stored as typed. */
-export function invalidEngagementCodes(form: MasterDataPayload): string[] {
+/**
+ * The codes on this form that could not be stored as typed.
+ *
+ * Codes already on `row` are left out. They reached the table before this
+ * screen existed, and an edit sends only the fields it changed — so a code
+ * nobody touched is never submitted, and refusing it here would block
+ * retiring or re-filing a legacy mapping over a value the backend is not
+ * being asked to accept.
+ *
+ * @param form - The form as it currently stands.
+ * @param row - The record being edited, or absent while creating.
+ * @returns The codes the reader has to fix before Submit.
+ */
+export function invalidEngagementCodes(form: MasterDataPayload, row?: MasterDataRow): string[] {
   const f = form as InvoiceAccountMappingPayload;
+  const existing = row as InvoiceAccountMapping | undefined;
+  const stored = new Set([
+    ...(existing?.engagementCodes ?? []),
+    ...(existing?.engagementCodeSuffixes ?? []),
+  ]);
   return [...(f.engagementCodes ?? []), ...(f.engagementCodeSuffixes ?? [])].filter(
-    (code) => !isEngagementCodeValid(code),
+    (code) => !stored.has(code) && !isEngagementCodeValid(code),
   );
 }
 
@@ -207,7 +225,11 @@ function isBlank(value: unknown): boolean {
  * Required means filled; an either-or group means at least one member filled;
  * and on the card tab the number must also match its provider's format.
  */
-export function isFormComplete(tab: MasterDataTab, form: MasterDataPayload): boolean {
+export function isFormComplete(
+  tab: MasterDataTab,
+  form: MasterDataPayload,
+  row?: MasterDataRow,
+): boolean {
   const optional = OPTIONAL_FIELDS[tab];
   const groups = EITHER_OR_GROUPS[tab];
 
@@ -229,7 +251,7 @@ export function isFormComplete(tab: MasterDataTab, form: MasterDataPayload): boo
   // A storable engagement code is part of "filled in" for the same reason a
   // well-formed card number is below: the reader should not reach Submit on a
   // value the column cannot hold.
-  if (tab === "invoiceAccountMappings" && invalidEngagementCodes(form).length > 0) return false;
+  if (tab === "invoiceAccountMappings" && invalidEngagementCodes(form, row).length > 0) return false;
 
   // A well-formed card number is part of "filled in", not a separate check
   // the reader discovers only after pressing Submit.

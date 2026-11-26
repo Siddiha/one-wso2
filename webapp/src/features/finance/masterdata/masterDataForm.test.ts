@@ -31,6 +31,7 @@ import type {
   ExpenseTypePayload,
   InvoiceAccountMapping,
   InvoiceAccountMappingPayload,
+  MasterDataRow,
   SubsidiaryPayload,
 } from "./masterDataTypes";
 
@@ -485,5 +486,54 @@ describe("initialFormData — invoice account mappings", () => {
     form.engagementCodes = ["RND-GEN-IAM", "RND-GEN-INT"];
     form.invCostTypeId = 4;
     expect(changedFields(row, form)).toEqual({ invCostTypeId: 4 });
+  });
+});
+
+// A code with a slash or an ampersand reached this table from a spreadsheet
+// paste, long before the screen existed. The backend enforces the same
+// whitelist the form does, but an edit sends only the fields it changed — so
+// a code nobody touched is never submitted, and refusing it here would leave
+// a legacy mapping impossible to retire or re-file.
+describe("engagement codes already stored on a row", () => {
+  const legacy = {
+    id: 14,
+    internalId: "351",
+    accountNumber: "61033-003",
+    accountClassification: "Travel - Air Ticket",
+    engagementCodes: ["RND/GEN"],
+    engagementCodeSuffixes: ["R&D"],
+    invCostTypeId: 1,
+    costType: "Air Ticket",
+    department: "Engineering",
+    status: "active",
+  } as MasterDataRow;
+
+  const form = {
+    ...MAPPING_FORM,
+    engagementCodes: ["RND/GEN"],
+    engagementCodeSuffixes: ["R&D"],
+  } as InvoiceAccountMappingPayload;
+
+  it("are not reported as invalid when they came with the row", () => {
+    expect(invalidEngagementCodes(form, legacy)).toEqual([]);
+  });
+
+  it("do not block the edit, so such a mapping can still be retired", () => {
+    expect(isFormComplete("invoiceAccountMappings", form, legacy)).toBe(true);
+  });
+
+  // Only what was already there is forgiven. Anything typed now has to be
+  // storable, or the backend answers the save with a 400.
+  it("still refuse a new bad code typed alongside them", () => {
+    const withNew = { ...form, engagementCodes: ["RND/GEN", "MKT GEN"] };
+
+    expect(invalidEngagementCodes(withNew, legacy)).toEqual(["MKT GEN"]);
+    expect(isFormComplete("invoiceAccountMappings", withNew, legacy)).toBe(false);
+  });
+
+  // Creating has no row to inherit from, so every code is held to the rule.
+  it("are still refused while creating, where nothing is inherited", () => {
+    expect(invalidEngagementCodes(form)).toEqual(["RND/GEN", "R&D"]);
+    expect(isFormComplete("invoiceAccountMappings", form)).toBe(false);
   });
 });

@@ -145,7 +145,7 @@ export default function MasterDataFormDialog({
   const [form, setForm] = useState<MasterDataPayload>(() => initialFormData(tab, row));
 
   const pending = create.isPending || update.isPending;
-  const complete = isFormComplete(tab, form);
+  const complete = isFormComplete(tab, form, row);
   const unchanged = row ? isUnchanged(row, form) : false;
   const canSubmit = complete && !unchanged && !pending;
 
@@ -209,6 +209,7 @@ export default function MasterDataFormDialog({
         <Fields
           tab={tab}
           form={form}
+          row={row}
           set={set}
           setMany={setMany}
           glCodes={glCodes}
@@ -243,6 +244,7 @@ export default function MasterDataFormDialog({
 function Fields({
   tab,
   form,
+  row,
   set,
   setMany,
   glCodes,
@@ -254,6 +256,8 @@ function Fields({
 }: {
   tab: MasterDataTab;
   form: MasterDataPayload;
+  /** The record being edited, or absent while creating. */
+  row?: MasterDataRow;
   set: (key: string, value: string | number | string[]) => void;
   setMany: (patch: Record<string, string | number | string[]>) => void;
   glCodes?: GlCode[];
@@ -431,7 +435,10 @@ function Fields({
       // A row written before this picker existed can carry an account number
       // that matches no GL code. Its stored values are still shown and the
       // rest of the row stays editable.
-      const unmatchedAccount = !pickedGlCode && f.accountNumber.trim().length > 0;
+      // Only once the GL codes have arrived. Until then nothing matches, and
+      // saying so would flash on every edit of a perfectly ordinary mapping.
+      const unmatchedAccount =
+        glCodes !== undefined && !pickedGlCode && f.accountNumber.trim().length > 0;
 
       const applyGlCode = (glCodeId: number) => {
         const picked = (glCodes ?? []).find((g) => g.id === glCodeId);
@@ -458,7 +465,7 @@ function Fields({
           : "Filled in from the GL code."
         : undefined;
 
-      const badCodes = invalidEngagementCodes(f);
+      const badCodes = invalidEngagementCodes(f, row);
       return (
         <Box sx={MAPPING_FORM_SX}>
           <IdSelectInput
