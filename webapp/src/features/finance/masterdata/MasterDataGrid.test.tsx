@@ -130,3 +130,50 @@ describe("the master-data table's row actions", () => {
     expect(screen.getByLabelText("Delete")).toBeInTheDocument();
   });
 });
+
+// The account name and internal ID have no column of their own on this tab,
+// so the info tooltip is the only place they appear. Reachable by pointer
+// alone, they would not exist at all for anyone using a keyboard or a screen
+// reader, which on the table that decides where money posts is not a
+// cosmetic gap.
+describe("the master-data table's hidden detail", () => {
+  it("names the fields behind the info icon, and lets a keyboard reach them", () => {
+    show("invoiceAccountMappings", invoiceAccountMapping as MasterDataRow);
+
+    const icon = screen.getByRole("img", {
+      name: "Account Name: Travel - Air Ticket, Internal ID: 351",
+    });
+    expect(icon).toHaveAttribute("tabindex", "0");
+  });
+
+  it("says N/A for a detail the row does not carry, as the tooltip does", () => {
+    show("invoiceAccountMappings", {
+      ...invoiceAccountMapping,
+      internalId: "",
+    } as MasterDataRow);
+
+    expect(
+      screen.getByRole("img", { name: "Account Name: Travel - Air Ticket, Internal ID: N/A" }),
+    ).toBeInTheDocument();
+  });
+
+  // Capped at two chips on this tab, so a mapping with three codes keeps one
+  // in the tooltip only.
+  it("names the whole code list when the cell is showing part of it", () => {
+    show("invoiceAccountMappings", {
+      ...invoiceAccountMapping,
+      engagementCodes: ["RND-GEN-INT", "MKT-EVT-IND", "SAL-GEN"],
+    } as MasterDataRow);
+
+    const cell = screen.getByLabelText("RND-GEN-INT, MKT-EVT-IND, SAL-GEN");
+    expect(cell).toHaveAttribute("tabindex", "0");
+  });
+
+  // Nothing hidden, nothing to announce: a label repeating the one chip
+  // already on screen would be read out twice.
+  it("leaves a cell that hides nothing unlabelled and out of the tab order", () => {
+    show("invoiceAccountMappings", invoiceAccountMapping as MasterDataRow);
+
+    expect(screen.queryByLabelText("RND-GEN-INT")).not.toBeInTheDocument();
+  });
+});

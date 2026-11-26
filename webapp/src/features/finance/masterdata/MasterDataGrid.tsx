@@ -78,11 +78,21 @@ function ChipList({ values, max, lines }: { values: string[]; max?: number; line
 
   const shown = max === undefined ? values : values.slice(0, max);
   const hiddenCount = values.length - shown.length;
+  // No tooltip when there is one value and nothing can be hidden — one that
+  // repeats the cell is just something that flickers when the pointer
+  // crosses the row.
+  const mayHide = hiddenCount > 0 || (lines !== undefined && values.length > 1);
+  const spoken = values.join(", ");
   const chips = (
     <Stack
       direction="row"
       gap={0.5}
       flexWrap="wrap"
+      // Focusable and named in full whenever the cell is holding something
+      // back, for the same reason as the info icon above: the tooltip is
+      // the only place the rest of the list can be read, and a bare div can
+      // be neither reached with a keyboard nor read out.
+      {...(mayHide ? { tabIndex: 0, "aria-label": spoken } : {})}
       sx={{
         py: 0.75,
         ...(lines === undefined
@@ -102,17 +112,9 @@ function ChipList({ values, max, lines }: { values: string[]; max?: number; line
     </Stack>
   );
 
-  // No tooltip when there is one value and nothing can be hidden — one that
-  // repeats the cell is just something that flickers when the pointer
-  // crosses the row.
-  const mayHide = hiddenCount > 0 || (lines !== undefined && values.length > 1);
   if (!mayHide) return chips;
   return (
-    <Tooltip
-      arrow
-      placement="top"
-      title={<Box sx={{ p: 0.5, fontSize: 12.5 }}>{values.join(", ")}</Box>}
-    >
+    <Tooltip arrow placement="top" title={<Box sx={{ p: 0.5, fontSize: 12.5 }}>{spoken}</Box>}>
       {chips}
     </Tooltip>
   );
@@ -157,6 +159,9 @@ function StatusChip({ value }: { value: string }) {
  */
 function InfoCell({ text, details }: { text: string; details: [string, string][] }) {
   const shown = details.filter(([, v]) => v && v !== EMPTY);
+  // The same lines the tooltip draws, as one string. Built from `details`
+  // rather than written out again so the two cannot drift apart.
+  const spoken = details.map(([k, v]) => `${k}: ${v || "N/A"}`).join(", ");
   return (
     <Stack direction="row" alignItems="center" gap={0.5} sx={{ minWidth: 0 }}>
       <Typography sx={{ fontSize: 12.5, wordBreak: "break-word" }}>{text || EMPTY}</Typography>
@@ -174,8 +179,21 @@ function InfoCell({ text, details }: { text: string; details: [string, string][]
             </Box>
           }
         >
-          {/* `flexShrink: 0` so the icon is not squeezed away by a long value. */}
-          <InfoIcon size={13} style={{ flexShrink: 0, opacity: 0.7 }} />
+          {/* Focusable, and carrying the details as its accessible name.
+              These fields have no column of their own, so a tooltip that
+              only a pointer can open is the only place they exist at all —
+              a bare icon leaves them unreachable by keyboard and silent to
+              a screen reader. `flexShrink: 0` so the icon is not squeezed
+              away by a long value. */}
+          <Box
+            component="span"
+            tabIndex={0}
+            role="img"
+            aria-label={spoken}
+            sx={{ display: "inline-flex", flexShrink: 0, opacity: 0.7 }}
+          >
+            <InfoIcon size={13} />
+          </Box>
         </Tooltip>
       )}
     </Stack>
