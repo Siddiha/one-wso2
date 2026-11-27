@@ -550,7 +550,7 @@ function Fields({
           >
             {badCodes.length > 0
               ? `Cannot be saved as typed: ${badCodes.join(" \u00b7 ")}. Use letters, digits, hyphens, dots or underscores only, one code per entry.`
-              : "Fill in at least one field, pressing Enter after each value. A suffix is matched on the engagement code's second part, so RND-GEN is found for RND-GEN-INT."}
+              : "Fill in at least one field. A code not on the list can be typed in as a new one. A suffix is matched on the engagement code's second part, so RND-GEN is found for RND-GEN-INT."}
           </Typography>
         </Box>
       );

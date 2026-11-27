@@ -217,7 +217,7 @@ export function IdSelectInput({
  * Without it, that these lists accept values not already on them is
  * something the reader has to guess.
  */
-const MULTI_SELECT_HELPER = "For custom text, type and press Enter";
+const MULTI_SELECT_HELPER = "Pick from the list, or type a new value";
 
 /**
  * Caps the field's height and scrolls its chips inside it.
@@ -237,6 +237,19 @@ const SCROLLING_CHIPS_SX = {
  *
  * Every multi-select in the source is `freeForm` — engagement codes, their
  * suffixes and lead emails are all lists the form is allowed to extend.
+ *
+ * `autoSelect` is what makes a typed value count. Without it a half-typed
+ * entry is thrown away when the field loses focus, so someone who types a
+ * code the list does not offer and goes straight for Submit loses it: the
+ * list ends up empty, the either-or group it belongs to reads as unfilled
+ * and Submit stays disabled. The field then looks like it accepts only the
+ * codes already on the list, because picking one of those is the only route
+ * that leaves a chip behind.
+ *
+ * `autoHighlight` is off for the same reason. It highlights the first
+ * suggestion as you type, and Enter takes the highlight over what was typed
+ * — so a new code that happens to read as the start of an existing one is
+ * quietly replaced by that existing one.
  */
 export function MultiSelectInput({
   id,
@@ -271,7 +284,7 @@ export function MultiSelectInput({
       id={id}
       multiple
       freeSolo
-      autoHighlight
+      autoSelect
       options={options}
       value={[...values]}
       sx={scrollChips ? SCROLLING_CHIPS_SX : undefined}
